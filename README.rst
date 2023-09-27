@@ -1,3 +1,7 @@
+Label-Detect-Verify is an open source project by Thomas Hymel to essentially combine the functionalities of LabelImg (simple GUI for labeling objects in images and saving bounding box labels) and YOLOv7 (object detection model) into one simple-to-use GUI for creating labels, training a model, detecting new images, and verifying the new detections for a simple all-in-one, human-in-the-loop, object detection solution to extracting domain-specific information from RGB images. 
+
+=======
+
 .. image:: /readme/images/labelimg.png
         :target: https://github.com/heartexlabs/label-studio
 
