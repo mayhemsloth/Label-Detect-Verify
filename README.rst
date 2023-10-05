@@ -1,4 +1,6 @@
-Label-Detect-Verify is an open source project by Thomas Hymel to essentially combine the functionalities of LabelImg (simple GUI for labeling objects in images and saving bounding box labels) and YOLOv7 (object detection model) into one simple-to-use GUI for creating labels, training a model, detecting new images, and verifying the new detections for a simple all-in-one, human-in-the-loop, object detection solution to extracting domain-specific information from RGB images. 
+Label-Detect-Verify is an open source project by Thomas Hymel to essentially combine the functionalities of LabelImg (simple GUI for labeling objects in images and saving bounding box labels) and YOLOv7 (object detection model) into one simple-to-use GUI for creating labels, training a model, detecting new images, and verifying the new detections for a simple all-in-one, human-in-the-loop, object detection solution for extracting domain-specific information from RGB images. Below is the original README (with some small picture-focused edits) of the forked LabelImg repo.
+
+The steps for installing Label-Detect-Verify are the following, tested only on Windows machine.
 
 =======
 
@@ -9,9 +11,6 @@ Label Studio is a modern, multi-modal data annotation tool
 =======
 
 LabelImg, the popular image annotation tool created by Tzutalin with the help of dozens contributors, is no longer actively being developed and has become part of the Label Studio community. Check out `Label Studio <https://github.com/heartexlabs/label-studio>`__, the most flexible open source data labeling tool for images, text, hypertext, audio, video and time-series data. `Install <https://labelstud.io/guide/install.html>`__ Label Studio and join the `slack community <https://label-studio.slack.com/>`__ to get started.
-
-.. image:: /readme/images/label-studio-1-6-player-screenshot.png
-        :target: https://github.com/heartexlabs/label-studio
 
 About LabelImg
 ========
