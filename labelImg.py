@@ -380,6 +380,51 @@ class MainWindow(QMainWindow, WindowMixin):
         self.draw_squares_option.triggered.connect(self.toggle_draw_square)
 
         # ------ LDV Additional Actions ------
+        '''
+        Script Buttons Needed
+        1) Detect Raw Captures
+        2) Move Verified Captures
+        3) Train Model
+        4) Test Model(s)       
+        '''
+        # feature to enable or disable the confirmation popup on the additional LDV features
+        self.show_LDV_confirmation = True # to keep track of whether to show confirmation
+
+        # action for toggling on and off the confirmation box
+        ldv_confirm_toggle = action(text=get_str('ldvConfirm'), 
+                                    slot=self.toggle_LDV_confirmation,
+                                    shortcut='Ctrl+Shift+Y',
+                                    icon='expert',
+                                    tip=get_str('ldvConfirmDetail'),
+                                    checkable=True)
+        
+        # action for running a script to use a model to produce new object detections on all images in the raw captures folder
+        detect_raw = action(text=get_str('detectRaw'),  
+                            slot=self.dummy_run_script,
+                            shortcut='Ctrl+Shift+B',
+                            icon=None,
+                            tip=get_str('detectRawDetail'))
+        
+        # action for running a script to move all Verified captures into the Training folder
+        move_verified = action(text=get_str('moveVerified'),
+                                slot=self.dummy_run_script,
+                                shortcut='Ctrl+M',
+                                icon=None,
+                                tip=get_str('moveVerifiedDetail'))
+        
+        # action for running a script to train a new model based on the config file
+        train_model = action(text=get_str('trainModel'),
+                            slot=self.dummy_run_script,
+                            shortcut=None,
+                            icon=None,
+                            tip=get_str('trainModelDetail'))
+
+        # action for running a script to test a list of models based on the config file
+        test_model = action(text=get_str('testModel'),
+                            slot=self.dummy_run_script,
+                            shortcut=None,
+                            icon=None,
+                            tip=get_str('testModelDetail'))
         
         # Store actions for further handling.
         self.actions = Struct(save=save, save_format=save_format, saveAs=save_as, open=open, close=close, resetAll=reset_all, deleteImg=delete_image,
@@ -408,6 +453,7 @@ class MainWindow(QMainWindow, WindowMixin):
             edit=self.menu(get_str('menu_edit')),
             view=self.menu(get_str('menu_view')),
             help=self.menu(get_str('menu_help')),
+            ldv=self.menu(get_str('menu_ldv')),   # added LDV menu
             recentFiles=QMenu(get_str('menu_openRecent')),
             labelList=label_menu)
 
@@ -428,6 +474,8 @@ class MainWindow(QMainWindow, WindowMixin):
         self.display_label_option.setChecked(settings.get(SETTING_PAINT_LABEL, False))
         self.display_label_option.triggered.connect(self.toggle_paint_labels_option)
 
+        # the order of the tuple of action objects dictates the order of the actions in the drop down menus
+        # Note that whenever there is a None, this is interpreted by add_actions to be a Separator
         add_actions(self.menus.file,
                     (open, open_dir, change_save_dir, open_annotation, copy_prev_bounding, self.menus.recentFiles, save, save_format, save_as, close, reset_all, delete_image, quit))
         add_actions(self.menus.help, (help_default, show_info, show_shortcut))
@@ -440,6 +488,13 @@ class MainWindow(QMainWindow, WindowMixin):
             zoom_in, zoom_out, zoom_org, None,
             fit_window, fit_width, None,
             light_brighten, light_darken, light_org))
+        add_actions(self.menus.ldv,
+                    (detect_raw, 
+                     move_verified,
+                     train_model,
+                     test_model,
+                     None,
+                     ldv_confirm_toggle))
 
         self.menus.file.aboutToShow.connect(self.update_file_menu)
 
@@ -449,7 +504,10 @@ class MainWindow(QMainWindow, WindowMixin):
             action('&Copy here', self.copy_shape),
             action('&Move here', self.move_shape)))
 
+
         self.tools = self.toolbar('Tools')
+        # the order of the actions here dictate how they appear on the left toolbar when in Beginner Mode or Advanced Mode
+        # the None will be interpreted as a Separator
         self.actions.beginner = (
             open, open_dir, change_save_dir, open_next_image, open_prev_image, verify, save, save_format, None, create, copy, delete, None,
             zoom_in, zoom, zoom_out, fit_window, fit_width, None,
@@ -540,6 +598,38 @@ class MainWindow(QMainWindow, WindowMixin):
         # Open Dir if default file
         if self.file_path and os.path.isdir(self.file_path):
             self.open_dir_dialog(dir_path=self.file_path, silent=True)
+
+    # ----- START LDV MainWindow Functions added ------ #
+    def toggle_LDV_confirmation(self):
+        self.show_LDV_confirmation = not self.show_LDV_confirmation
+
+    def dummy_print_statement(self):
+        print("Dummy script has been run.")
+
+    def dummy_run_script(self):
+        """
+        Dummy version of the run script function to be used as a placeholder for the functionality
+        """
+        # in the case where we confirm a pop-up
+        if self.show_LDV_confirmation:
+            msg = QMessageBox()
+            msg.setIcon(QMessageBox.Warning)
+            msg.setText("Are you sure you want to execute this action?")
+            msg.setWindowTitle("Label-Detect-Verify Action Confirmation")
+            msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+
+            result=msg.exec_()
+            if result == QMessageBox.Yes:
+                self.dummy_print_statement()
+
+        else:
+            self.dummy_print_statement()
+
+    def detect_raw_script(self):
+        print("Dummy script has been run.")
+
+
+    # ----- END LDV MainWindow Functions added ------ #
 
     def keyReleaseEvent(self, event):
         if event.key() == Qt.Key_Control:
