@@ -48,7 +48,7 @@ from libs.create_ml_io import JSON_EXT
 from libs.ustr import ustr
 from libs.hashableQListWidgetItem import HashableQListWidgetItem
 
-__appname__ = 'labelImg'
+__appname__ = 'Label-Detect-Verify'
 
 
 class WindowMixin(object):
@@ -379,7 +379,7 @@ class MainWindow(QMainWindow, WindowMixin):
         self.draw_squares_option.setChecked(settings.get(SETTING_DRAW_SQUARE, False))
         self.draw_squares_option.triggered.connect(self.toggle_draw_square)
 
-        # ------ LDV Additional Actions ------
+        # ------ START LDV Additional Actions ------
         '''
         Script Buttons Needed
         1) Detect Raw Captures
@@ -394,7 +394,7 @@ class MainWindow(QMainWindow, WindowMixin):
         ldv_confirm_toggle = action(text=get_str('ldvConfirm'), 
                                     slot=self.toggle_LDV_confirmation,
                                     shortcut='Ctrl+Shift+Y',
-                                    icon='expert',
+                                    icon=None,
                                     tip=get_str('ldvConfirmDetail'),
                                     checkable=True)
         
@@ -402,29 +402,53 @@ class MainWindow(QMainWindow, WindowMixin):
         detect_raw = action(text=get_str('detectRaw'),  
                             slot=self.dummy_run_script,
                             shortcut='Ctrl+Shift+B',
-                            icon=None,
+                            icon='detect_raw_capture',
                             tip=get_str('detectRawDetail'))
         
         # action for running a script to move all Verified captures into the Training folder
         move_verified = action(text=get_str('moveVerified'),
                                 slot=self.dummy_run_script,
                                 shortcut='Ctrl+M',
-                                icon=None,
+                                icon='move_verified',
                                 tip=get_str('moveVerifiedDetail'))
         
         # action for running a script to train a new model based on the config file
         train_model = action(text=get_str('trainModel'),
                             slot=self.dummy_run_script,
                             shortcut=None,
-                            icon=None,
+                            icon='train_model',
                             tip=get_str('trainModelDetail'))
 
         # action for running a script to test a list of models based on the config file
         test_model = action(text=get_str('testModel'),
                             slot=self.dummy_run_script,
                             shortcut=None,
-                            icon=None,
+                            icon='test_model',
                             tip=get_str('testModelDetail'))
+        
+        # actions for configuring the settings of LDV # raw_dir, detected_dir, training_source_dir, optional_verified_dir
+        ldv_set_raw_dir = action(text=get_str('setRawDir'),
+                                    slot=self.set_raw_dir_dialog,
+                                    shortcut=None,
+                                    icon=None,
+                                    tip=get_str('setRawDirDetail'))
+        ldv_set_detected_dir = action(text=get_str('setDetectedDir'),
+                                         slot=self.set_detected_dir_dialog,
+                                         shortcut=None,
+                                         icon=None,
+                                         tip=get_str('setDetectedDirDetail'))
+        ldv_set_training_source_dir = action(text=get_str('setTrainingSourceDir'),
+                                                slot=self.set_training_source_dir_dialog,
+                                                shortcut=None,
+                                                icon=None,
+                                                tip=get_str('setTrainingSourceDirDetail'))
+        ldv_set_optional_verified_dir = action(text=get_str('setOptionalVerifiedOutputDir'),
+                                                slot=self.set_optional_verified_dir_dialog,
+                                                shortcut=None,
+                                                icon=None,
+                                                tip=get_str('setOptionalVerifiedOutputDirDetail'))
+        
+        # ------ END LDV Additional Actions ------
         
         # Store actions for further handling.
         self.actions = Struct(save=save, save_format=save_format, saveAs=save_as, open=open, close=close, resetAll=reset_all, deleteImg=delete_image,
@@ -446,7 +470,9 @@ class MainWindow(QMainWindow, WindowMixin):
                                                delete, shape_line_color, shape_fill_color),
                               onLoadActive=(
                                   close, create, create_mode, edit_mode),
-                              onShapesPresent=(save_as, hide_all, show_all))
+                              onShapesPresent=(save_as, hide_all, show_all),
+                              ldvConfirm=ldv_confirm_toggle, detectRaw=detect_raw, moveVerified=move_verified,
+                              trainModel=train_model, testModel=test_model)
 
         self.menus = Struct(
             file=self.menu(get_str('menu_file')),
@@ -454,6 +480,7 @@ class MainWindow(QMainWindow, WindowMixin):
             view=self.menu(get_str('menu_view')),
             help=self.menu(get_str('menu_help')),
             ldv=self.menu(get_str('menu_ldv')),   # added LDV menu
+            ldv_settings=self.menu(get_str('menu_ldv_settings')), # added LDV Settings menu
             recentFiles=QMenu(get_str('menu_openRecent')),
             labelList=label_menu)
 
@@ -489,12 +516,10 @@ class MainWindow(QMainWindow, WindowMixin):
             fit_window, fit_width, None,
             light_brighten, light_darken, light_org))
         add_actions(self.menus.ldv,
-                    (detect_raw, 
-                     move_verified,
-                     train_model,
-                     test_model,
-                     None,
-                     ldv_confirm_toggle))
+                    (detect_raw, move_verified, train_model, test_model,
+                     None, ldv_confirm_toggle))
+        add_actions(self.menus.ldv_settings,
+                    (ldv_set_raw_dir, ldv_set_detected_dir, ldv_set_training_source_dir, ldv_set_optional_verified_dir))
 
         self.menus.file.aboutToShow.connect(self.update_file_menu)
 
@@ -511,12 +536,15 @@ class MainWindow(QMainWindow, WindowMixin):
         self.actions.beginner = (
             open, open_dir, change_save_dir, open_next_image, open_prev_image, verify, save, save_format, None, create, copy, delete, None,
             zoom_in, zoom, zoom_out, fit_window, fit_width, None,
-            light_brighten, light, light_darken, light_org)
+            detect_raw, move_verified, train_model, test_model, None,
+            light_brighten, light, light_darken, light_org, None
+            )
 
         self.actions.advanced = (
             open, open_dir, change_save_dir, open_next_image, open_prev_image, save, save_format, None,
             create_mode, edit_mode, None,
-            hide_all, show_all)
+            hide_all, show_all, None,
+            detect_raw, move_verified, train_model, test_model)
 
         self.statusBar().showMessage('%s started.' % __appname__)
         self.statusBar().show()
@@ -554,7 +582,7 @@ class MainWindow(QMainWindow, WindowMixin):
         self.move(position)
         save_dir = ustr(settings.get(SETTING_SAVE_DIR, None))
         self.last_open_dir = ustr(settings.get(SETTING_LAST_OPEN_DIR, None))
-        if self.default_save_dir is None and save_dir is not None and os.path.exists(save_dir):
+        if (self.default_save_dir is None) and (save_dir is not None) and (os.path.exists(save_dir)):
             self.default_save_dir = save_dir
             self.statusBar().showMessage('%s started. Annotation will be saved to %s' %
                                          (__appname__, self.default_save_dir))
@@ -566,6 +594,12 @@ class MainWindow(QMainWindow, WindowMixin):
         self.canvas.set_drawing_color(self.line_color)
         # Add chris
         Shape.difficult = self.difficult
+
+        # LDV Directory Settings loading in
+        self.raw_dir = ustr(settings.get(SETTING_RAW_CAPTURES_DIR, None))
+        self.detected_dir = ustr(settings.get(SETTING_DETECTED_CAPTURES_DIR, None))
+        self.training_source_dir = ustr(settings.get(SETTING_TRAINING_SOURCE_DIR, None))
+        self.optional_verified_dir = ustr(settings.get(SETTING_OPTIONAL_VERIFIED_DIR, None))
 
         def xbool(x):
             if isinstance(x, QVariant):
@@ -603,6 +637,47 @@ class MainWindow(QMainWindow, WindowMixin):
     def toggle_LDV_confirmation(self):
         self.show_LDV_confirmation = not self.show_LDV_confirmation
 
+    # raw_dir, detected_dir, training_source_dir, optional_verified_dir
+    def set_raw_dir_dialog(self, _value=False):
+        path = self.raw_dir if (self.raw_dir is not None) else '.'
+        dir_path = ustr(QFileDialog.getExistingDirectory(self, '%s - Directory where Raw Captures are Stored' % __appname__, 
+                                                         path, QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks))
+        if dir_path is not None and len(dir_path) > 1:
+            self.raw_dir = dir_path
+
+        self.statusBar().showMessage('Changed LDV Settings folder. Raw Captures Directory will be %s' % self.raw_dir)
+        self.statusBar().show()
+
+    def set_detected_dir_dialog(self, _value=False):
+        path = self.detected_dir if (self.detected_dir is not None) else '.'
+        dir_path = ustr(QFileDialog.getExistingDirectory(self, '%s - Directory where Detected Captures will be moved to' % __appname__, 
+                                                         path, QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks))
+        if dir_path is not None and len(dir_path) > 1:
+            self.detected_dir = dir_path
+            
+        self.statusBar().showMessage('Changed LDV Settings folder. Detected Captures Directory will be %s' % self.detected_dir)
+        self.statusBar().show()
+
+    def set_training_source_dir_dialog(self, _value=False):
+        path = self.training_source_dir if (self.training_source_dir is not None) else '.'
+        dir_path = ustr(QFileDialog.getExistingDirectory(self, '%s - Training Source Directory (and where Verified Captures will be moved)' % __appname__, 
+                                                         path, QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks))
+        if dir_path is not None and len(dir_path) > 1:
+            self.training_source_dir = dir_path
+            
+        self.statusBar().showMessage('Changed LDV Settings folder. Training Source Directory will be %s' % self.training_source_dir)
+        self.statusBar().show()
+
+    def set_optional_verified_dir_dialog(self, _value=False):
+        path = self.optional_verified_dir if (self.optional_verified_dir is not None) else '.'
+        dir_path = ustr(QFileDialog.getExistingDirectory(self, '%s - Optional Directory where Verified Captures will additionally be copied to' % __appname__, 
+                                                         path, QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks))
+        if dir_path is not None and len(dir_path) > 1:
+            self.optional_verified_dir = dir_path
+            
+        self.statusBar().showMessage('Changed LDV Settings folder. Optional Verified Captures Directory will be %s' % self.optional_verified_dir)
+        self.statusBar().show()
+
     def dummy_print_statement(self):
         print("Dummy script has been run.")
 
@@ -624,10 +699,6 @@ class MainWindow(QMainWindow, WindowMixin):
 
         else:
             self.dummy_print_statement()
-
-    def detect_raw_script(self):
-        print("Dummy script has been run.")
-
 
     # ----- END LDV MainWindow Functions added ------ #
 
@@ -1366,6 +1437,12 @@ class MainWindow(QMainWindow, WindowMixin):
         settings[SETTING_PAINT_LABEL] = self.display_label_option.isChecked()
         settings[SETTING_DRAW_SQUARE] = self.draw_squares_option.isChecked()
         settings[SETTING_LABEL_FILE_FORMAT] = self.label_file_format
+
+        settings[SETTING_RAW_CAPTURES_DIR] = self.raw_dir if self.raw_dir and os.path.exists(self.raw_dir) else ''
+        settings[SETTING_DETECTED_CAPTURES_DIR] = self.detected_dir if self.detected_dir and os.path.exists(self.detected_dir) else ''
+        settings[SETTING_TRAINING_SOURCE_DIR] = self.training_source_dir if self.training_source_dir and os.path.exists(self.training_source_dir) else ''
+        settings[SETTING_OPTIONAL_VERIFIED_DIR] = self.optional_verified_dir if self.optional_verified_dir and os.path.exists(self.optional_verified_dir) else ''
+
         settings.save()
 
     def load_recent(self, filename):
