@@ -1,6 +1,227 @@
 import os
 import shutil
+import random
+import glob
+import yaml
 from xml.etree import ElementTree as ET
+
+def clear_YOLO_dataset_folders(YOLO_dataset_folder):
+    """
+    Clears the temp YOLO dataset folder
+    """
+    # defining the folder paths
+    all_folders = []
+    for super_folder in ['images', 'labels']:
+        one_path = os.path.join(YOLO_dataset_folder, super_folder)
+        all_folders.append(one_path)
+
+    for folder in all_folders:
+        # clears the folders, so that new freshly random training source examples can populate it
+        if os.path.exists(folder):
+            shutil.rmtree(folder) # deletes entire directory tree and folder
+
+def create_YOLO_dataset_folders(YOLO_dataset_folder):
+    """
+    Makes the temp YOLOv7 compatible dataset folder structure
+    """
+    # defining the folder paths images/train, images/valid, labels/train, labels/valid
+    all_folders = []
+    for super_folder in ['images', 'labels']:
+        for sub_dir in ['train', 'valid']:
+            one_path = os.path.join(YOLO_dataset_folder, super_folder, sub_dir)
+            all_folders.append(one_path)
+    
+    for folder in all_folders:
+        os.makedirs(folder, exist_ok=True) # makes the directory anew
+
+
+def generate_class_mapping(input_dirs):
+    """
+    Generates the mapping of class names to class indices
+    """
+    class_names = set()
+    for input_dir in input_dirs:
+        for xml_file in glob.glob(os.path.join(input_dir, "*.xml")):
+            tree = ET.parse(xml_file)
+            root = tree.getroot()
+
+            for obj in root.findall("object"):
+                class_name = obj.find("name").text
+                class_names.add(class_name)
+
+    class_mapping = {name: idx for idx, name in enumerate(sorted(class_names))} # note that Python dicts are now ordered dicts
+    return class_mapping
+
+def copy_files_to_YOLO_dataset_folder(training_source_folder, YOLO_dataset_folder, val_percentage=0.3):
+    """
+    Copies the image and XML files to the YOLO dataset folder structure. 
+    Copies only those images that have corresponding XML files
+    """
+    # Get all image and XML file paths
+    img_extensions = ['jpg', 'jpeg', 'png']
+    img_files = [glob.glob(os.path.join(training_source_folder, f'*.{ext}')) for ext in img_extensions]
+    img_files = [item for sublist in img_files for item in sublist]  # Flatten the list
+    xml_files = glob.glob(os.path.join(training_source_folder, '*.xml'))
+
+    # Create a list of file basenames that have both image and XML files
+    img_basenames = set([os.path.basename(f).split('.')[0] for f in img_files])
+    xml_basenames = set([os.path.basename(f).split('.')[0] for f in xml_files])
+    common_basenames = list(img_basenames & xml_basenames)
+
+    # Shuffle and split into training and validation sets
+    random.shuffle(common_basenames)
+    num_val = int(len(common_basenames) * val_percentage)
+    val_set = set(common_basenames[:num_val])
+    train_set = set(common_basenames[num_val:])
+
+    # Copy image and XML files to respective training and validation folders
+    for basename in common_basenames:
+        img_file = next(f for f in img_files if (os.path.splitext(os.path.basename(f))[0] == basename)) # grabs the first file with same basename
+        xml_file = os.path.join(training_source_folder, f"{basename}.xml")
+
+        target_folder = 'valid' if basename in val_set else 'train'
+
+        shutil.copy(img_file, os.path.join(YOLO_dataset_folder, 'images', target_folder))
+        shutil.copy(xml_file, os.path.join(YOLO_dataset_folder, 'images', target_folder))
+
+def convert_voc_to_yolo(xml_path, class_mapping):
+    """
+    Converts the PASCAL VOC style bounding box annotations to to YOLO style bounding box annotations
+    """
+    tree = ET.parse(xml_path)
+    root = tree.getroot()
+
+    # get width and height of current image from VOC file
+    img_width = int(root.find('size').find('width').text)
+    img_height = int(root.find('size').find('height').text)
+    img_channels = int(root.find('size').find('depth').text)
+
+    yolo_annots = []
+
+    for obj in root.findall("object"):
+        class_name = obj.find("name").text
+        class_idx = class_mapping[class_name]
+        
+        bbox = obj.find("bndbox")
+        x_min = float(bbox.find("xmin").text)
+        y_min = float(bbox.find("ymin").text)
+        x_max = float(bbox.find("xmax").text)
+        y_max = float(bbox.find("ymax").text)
+
+        x_center = (x_min + x_max) / (2 * img_width)
+        y_center = (y_min + y_max) / (2 * img_height)
+        width = (x_max - x_min) / img_width
+        height = (y_max - y_min) / img_height
+
+        yolo_annots.append(f"{class_idx} {x_center} {y_center} {width} {height}")
+
+    return "\n".join(yolo_annots)
+
+def create_label_files(YOLO_dataset_folder, class_mapping):
+    """
+    Creates and saves the YOLO-compatible label files in the proper folders
+    """
+
+    for set_type in ['train', 'valid']:
+        xml_files = glob.glob(os.path.join(YOLO_dataset_folder, 'images', set_type, '*.xml'))
+        for xml_file_path in xml_files:
+            yolo_annotations = convert_voc_to_yolo(xml_file_path, class_mapping)  # does the converting from PASCAL VOC to YOLO style
+            yolo_txt_path = os.path.join(YOLO_dataset_folder, 'labels', set_type, os.path.basename(xml_file_path).replace('.xml', '.txt'))
+            
+            with open(yolo_txt_path, 'w') as f:
+                f.write(yolo_annotations)
+
+def create_data_yaml_file(YOLO_dataset_folder, class_mapping):
+    """
+    Create a YAML file with given dataset paths and class mapping.
+    
+    Args:
+    - dataset_path (str): The root folder for the dataset.
+    - class_mapping (dict): Dictionary where keys are class names.
+    """
+
+    # construct paths
+    train_path = os.path.join(YOLO_dataset_folder, 'images', 'train')
+    val_path = os.path.join(YOLO_dataset_folder, 'images', 'valid')
+    yaml_save_path = os.path.join(YOLO_dataset_folder, 'dataset_info')
+
+    # Get class names and number of classes from the mapping
+    class_names = sorted(list(class_mapping.keys())) # probably don't need the sorted, but whatever, just ensures previous sorted order
+    num_classes = len(class_names)
+
+    # Create the YAML data structure
+    yaml_data = {
+        "train": train_path,
+        "val": val_path,
+        "nc": num_classes,
+        "names": class_names
+    }
+
+    # Write YAML file
+    with open(yaml_save_path, 'w') as yaml_file:
+        yaml.dump(yaml_data, yaml_file, sort_keys=False)
+
+    return yaml_save_path
+
+def update_nc_in_yaml(file_path, num_classes):
+    """
+    Update the 'nc' field in the YAML file with the new number of classes.
+    
+    Args:
+    - file_path (str): Path to the existing YAML file.
+    - num_classes (int): The new number of classes.
+    """
+    # Load existing YAML file
+    with open(file_path, 'r') as yaml_file:
+        yaml_data = yaml.safe_load(yaml_file)
+    
+    # Update 'nc' field
+    yaml_data['nc'] = num_classes
+    
+    # Save updated YAML file back
+    with open(file_path, 'w') as yaml_file:
+        yaml.dump(yaml_data, yaml_file)
+
+def train_model_file_helper(training_source_folder, temp_dataset_folder, model_config_yaml_path):
+    """
+    The helper function to be imported for primary functionality of Train Model action
+
+    Args:
+    - training_source_folder (str): The directory where training images and XML files are jointly are stored
+    - temp_dataset_folder (str): The temp directory where the images/[train,valid] and labels/[train,valid] are created for YOLO compatibility
+    - model_config_yaml_path (str): file path to where the 
+    """
+
+    # pre-emptive clear to reset the temporary folder
+    clear_YOLO_dataset_folders(YOLO_dataset_folder=temp_dataset_folder)
+    
+    # create the YOLOv7 compatible dataset directories
+    create_YOLO_dataset_folders(YOLO_dataset_folder=temp_dataset_folder)
+
+    # generate class mapping dict of name to index, directly from the XML files. 
+    # This is the ground truth for the class order
+    class_mapping = generate_class_mapping(input_dirs=[training_source_folder])
+
+    # locates all XML+image pairs in training source folder, splits into train and validation set, then copies over to images/{train,valid}
+    copy_files_to_YOLO_dataset_folder(training_source_folder=training_source_folder,
+                                      YOLO_dataset_folder=temp_dataset_folder,
+                                      val_percentage=0.3)
+    
+    # create the YOLO style txt files and place in appropriate labels folders
+    create_label_files(YOLO_dataset_folder=temp_dataset_folder, class_mapping=class_mapping)
+
+    # create the YAML dataset file
+    yaml_data_file_path = create_data_yaml_file(YOLO_dataset_folder=temp_dataset_folder, class_mapping=class_mapping)
+
+    # update the model config YAML file (namely the number of classes value)
+    update_nc_in_yaml(file_path=model_config_yaml_path, num_classes=len(class_mapping))
+
+    print("Finished with copying files from training source folder and creating the YOLO labels.")
+
+    #clear_YOLO_dataset_folders(YOLO_dataset_folder=temp_dataset_folder)
+
+    return class_mapping, yaml_data_file_path
+
 
 def move_verified_helper(last_open_dir, training_source_dir, optional_verified_dir=None):
     """

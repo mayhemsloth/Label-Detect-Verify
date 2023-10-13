@@ -47,7 +47,8 @@ from libs.create_ml_io import CreateMLReader
 from libs.create_ml_io import JSON_EXT
 from libs.ustr import ustr
 from libs.hashableQListWidgetItem import HashableQListWidgetItem
-from libs.ldv_utils import move_verified_helper
+from libs.ldv_utils import move_verified_helper, train_model_file_helper
+from ldv_config import LDV_CONFIGS
 
 __appname__ = 'Label-Detect-Verify'
 
@@ -88,6 +89,9 @@ class MainWindow(QMainWindow, WindowMixin):
         # Load string bundle for i18n
         self.string_bundle = StringBundle.get_bundle()
         get_str = lambda str_id: self.string_bundle.get_string(str_id)
+
+        # Load LDV configs as an attribute
+        self.ldv_configs = LDV_CONFIGS
 
         # Save as Pascal voc xml
         self.default_save_dir = default_save_dir
@@ -727,7 +731,7 @@ class MainWindow(QMainWindow, WindowMixin):
     def detect_raw_func(self):
         """ 
         Function responsible for the Detect Raw Captures action. 
-        Note that this function has two parts 1) Uses YOLOv7 model to detect on Raw Captures folder 2) Moves images to detected captures folder
+        Note that this function has two functional parts 1) Uses a YOLOv7 model to detect on Raw Captures folder 2) Moves images to detected captures folder
         """
 
         try: # ensure that the Raw Captures folder has been properly set
@@ -753,7 +757,7 @@ class MainWindow(QMainWindow, WindowMixin):
         Moves all VERIFIED images and associated files FROM CURRENTLY OPENED DIR to the TRAINING SOURCE dir
         Optionally, if the self.optional_verified_dir is set than ALSO move a copy to that location as well. 
         """
-        try: # ensure that there is currently an directory open
+        try: # ensure that there is currently a directory open
             assert self.last_open_dir and os.path.exists(self.last_open_dir), \
                 "No directory currently open. Can not perform Move Verified Action. \n\nPlease use [File -> Open Dir] before attempting again."
         except AssertionError as ae:
@@ -761,34 +765,35 @@ class MainWindow(QMainWindow, WindowMixin):
             return None
 
         try: # ensure that the Training Source Captures folder has been properly set
-            assert (self.training_source_dir is not None) and (os.path.exists(self.training_source_dir)), \
+            assert self.training_source_dir and (os.path.exists(self.training_source_dir)), \
                 "Training Source Folder not properly set. Can not perform Move Verified Action. \n\nPlease use [LDV Settings -> Set Training Source Folder] before attempting again."
         except AssertionError as ae:
             self.show_error_message_box(str(ae)) # Show error message box instead of printing to terminal
             return None
         
-        try: # ensure the optional verified path exists.
-            if (self.optional_verified_dir is not None) and len(self.optional_verified_dir) > 0: #  since this folder is optional, it's fine if it is None. If not, we check if folder exists
-                assert os.path.exists(self.optional_verified_dir), \
-                    f"Optional Verified Output Folder {self.optional_verified_dir} does not exist. Can not perform Move Verified Action. \n\nPlease use [LDV Settings -> (Optional) Set Verified Output Folder] to set an optional additional output folder to copy Verified to."
-                # confirm box for Optional Verified Path
-                if self.show_LDV_confirmation:
-                    msg = QMessageBox()
-                    msg.setIcon(QMessageBox.Warning)
-                    msg.setText(f"An extra copy of the verified images and labels will be moved to {self.optional_verified_dir}. Yes to continue. No to exit action entirely without any images moved.")
-                    msg.setWindowTitle("Move Verified Optional Action Confirmation")
-                    msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
-                    result = msg.exec_()
-                    if result == QMessageBox.No:
-                        return None
-        except AssertionError as ae:
-            self.show_error_message_box(str(ae))
-            return None
+        if self.optional_verified_dir is not None:
+            try: # ensure the optional verified path exists after checking that it's not None
+                if len(self.optional_verified_dir) > 0: #  since this folder is optional, it's fine if it is None. If not, we check if folder exists
+                    assert os.path.exists(self.optional_verified_dir), \
+                        f"Optional Verified Output Folder {self.optional_verified_dir} does not exist. Can not perform Move Verified Action. \n\nPlease use [LDV Settings -> (Optional) Set Verified Output Folder] to set an optional additional output folder to copy Verified to."
+                    # confirm box for Optional Verified Path
+                    if self.show_LDV_confirmation:
+                        msg = QMessageBox()
+                        msg.setIcon(QMessageBox.Warning)
+                        msg.setText(f"An extra copy of the verified images and labels will be moved to {self.optional_verified_dir}. Yes to continue. No to exit action entirely without any images moved.")
+                        msg.setWindowTitle("Move Verified Optional Action Confirmation")
+                        msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+                        result = msg.exec_()
+                        if result == QMessageBox.No:
+                            return None
+            except AssertionError as ae:
+                self.show_error_message_box(str(ae))
+                return None
         
-        # use the helper util function to do actual functionality
+        # use the imported helper util function to do actual Move Verified functionality
         report_str = move_verified_helper(last_open_dir=self.last_open_dir, 
-                                   training_source_dir=self.training_source_dir,
-                                   optional_verified_dir=self.optional_verified_dir)
+                                          training_source_dir=self.training_source_dir,
+                                          optional_verified_dir=self.optional_verified_dir)
         
         # reload/update the current directory in the GUI because some verified images will almost certainly have moved       
         self.import_dir_images(self.last_open_dir)
@@ -807,7 +812,12 @@ class MainWindow(QMainWindow, WindowMixin):
         except AssertionError as ae:
             self.show_error_message_box(str(ae)) # Show error message box instead of printing to terminal
             return None
-
+    
+        # assumes the temp dataset folder will go into the same folder as the training_source_dir
+        temp_YOLO_dataset_folder = os.path.join(self.training_source_dir, 'temp')
+        train_model_file_helper(training_source_folder=self.training_source_dir,
+                                temp_dataset_folder=temp_YOLO_dataset_folder,
+                                model_config_yaml_path=self.ldv_configs.training.cfg_yaml_filepath)
 
         self.dummy_print_statement()
 

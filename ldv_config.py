@@ -5,21 +5,37 @@
 
 from dataclasses import dataclass, field, asdict
 from typing import List, Optional, Tuple, Union
-from pathlib import Path  # used for 
+from pathlib import Path
 
 @dataclass
-class FolderLocations:
+class Training:
 
+    # ---
+    epochs: int = 750   # total number of epochs to train for
+    batch_size: int = 4 # should be changed if you hit 
+    img_input_size: Tuple[int,int] = (1280, 1280) # images will be automatically resized to this (X,X)
+                                                  # for training and test dataset purposes (X, Y) => ((X,X)_training, (Y,Y)_test)
+    workers: int = 2    # number of workers for data loaders
+
+    # ---- Generally Don't Touch These ---- #
+    yolov7_model_type: str = 'yolov7x'   # default will be yolov7x, other options are yolov7, yolov7-tiny, yolov7-e6e. But must download the weights files
+    weights_file: str = yolov7_model_type+'_training.pt' # expects, from initial setup, to have the pre-trained weights in the home folder of LDV 
+    cfg_yaml_filepath: Path = Path('yolov7', 'cfg', 'training', yolov7_model_type+'.yaml')
+    hyperparameter_yaml_filepath: Path = Path('yolov7', 'data', 'hyp.scratch.custom.yaml')
+    use_adam = True
 
     def to_dict(self):
         return asdict(self)
-
 
 @dataclass
 class LDVConfigs:
     ''' The final Configs compilation dataclass of all the other dataclasses '''
 
+    training: Training = field(default_factory=Training)
+    # stems_prep: StemsPrep =  field(default_factory=lambda: StemsPrep(stems_to_load=STEMS_TO_USE_, standard_sr=STANDARD_SR_))
+
     def to_dict(self):
         return asdict(self)
 
 LDV_CONFIGS = LDVConfigs()
+
