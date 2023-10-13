@@ -180,7 +180,7 @@ def update_nc_in_yaml(file_path, num_classes):
     
     # Save updated YAML file back
     with open(file_path, 'w') as yaml_file:
-        yaml.dump(yaml_data, yaml_file)
+        yaml.dump(yaml_data, yaml_file, sort_keys=False)
 
 def train_model_file_helper(training_source_folder, temp_dataset_folder, model_config_yaml_path):
     """

@@ -11,19 +11,21 @@ from pathlib import Path
 class Training:
 
     # ---
-    epochs: int = 750   # total number of epochs to train for
+    epochs: int = 20   # total number of epochs to train for
     batch_size: int = 4 # should be changed if you hit 
-    img_input_size: Tuple[int,int] = (1280, 1280) # images will be automatically resized to this (X,X)
-                                                  # for training and test dataset purposes (X, Y) => ((X,X)_training, (Y,Y)_test)
+    img_input_size: List[int] =  field(init=False)  # see __post_init__ below for setting these
     workers: int = 2    # number of workers for data loaders
 
     # ---- Generally Don't Touch These ---- #
     yolov7_model_type: str = 'yolov7x'   # default will be yolov7x, other options are yolov7, yolov7-tiny, yolov7-e6e. But must download the weights files
-    weights_file: str = yolov7_model_type+'_training.pt' # expects, from initial setup, to have the pre-trained weights in the home folder of LDV 
-    cfg_yaml_filepath: Path = Path('yolov7', 'cfg', 'training', yolov7_model_type+'.yaml')
-    hyperparameter_yaml_filepath: Path = Path('yolov7', 'data', 'hyp.scratch.custom.yaml')
+    weights_filepath: str = str(Path(yolov7_model_type+'_training.pt')) # expects, from initial setup, to have the pre-trained weights in the home folder of yolov7 
+    cfg_yaml_filepath: str= str(Path('cfg', 'training', yolov7_model_type+'.yaml'))
+    hyperparameter_yaml_filepath: str = str(Path('data', 'hyp.scratch.custom.yaml'))
     use_adam = True
 
+    def __post_init__(self):
+        self.img_input_size = [1280, 1280] # images will be automatically resized to the square (X,X)
+                                           # for training and test dataset purposes [X, Y] => ((X,X)_training, (Y,Y)_test)
     def to_dict(self):
         return asdict(self)
 

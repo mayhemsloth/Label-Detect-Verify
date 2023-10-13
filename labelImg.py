@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 import argparse
 import codecs
-import os.path
+import os
 import platform
 import shutil
 import sys
@@ -49,6 +49,9 @@ from libs.ustr import ustr
 from libs.hashableQListWidgetItem import HashableQListWidgetItem
 from libs.ldv_utils import move_verified_helper, train_model_file_helper
 from ldv_config import LDV_CONFIGS
+sys.path.insert(0, './yolov7')
+from yolov7.train import train_script_importable
+sys.path.pop(0) # Remove the inserted path to keep things clean
 
 __appname__ = 'Label-Detect-Verify'
 
@@ -815,9 +818,26 @@ class MainWindow(QMainWindow, WindowMixin):
     
         # assumes the temp dataset folder will go into the same folder as the training_source_dir
         temp_YOLO_dataset_folder = os.path.join(self.training_source_dir, 'temp')
-        train_model_file_helper(training_source_folder=self.training_source_dir,
-                                temp_dataset_folder=temp_YOLO_dataset_folder,
-                                model_config_yaml_path=self.ldv_configs.training.cfg_yaml_filepath)
+        class_map, data_yaml_filepath = \
+            train_model_file_helper(training_source_folder=self.training_source_dir,
+                                    temp_dataset_folder=temp_YOLO_dataset_folder,
+                                    model_config_yaml_path=os.path.join('yolov7', self.ldv_configs.training.cfg_yaml_filepath)
+            )
+
+        # runs the YOLOv7 train.py, but the importable function version. 
+        # Most of these args are set in the ldv_configs or dynamically determined before this point
+        # '''
+        _resu = train_script_importable(weights=self.ldv_configs.training.weights_filepath,
+                                        cfg=self.ldv_configs.training.cfg_yaml_filepath,
+                                        data=data_yaml_filepath,
+                                        hyp=self.ldv_configs.training.hyperparameter_yaml_filepath,
+                                        epochs=self.ldv_configs.training.epochs,
+                                        batch_size=self.ldv_configs.training.batch_size,
+                                        img_size=self.ldv_configs.training.img_input_size,
+                                        adam=self.ldv_configs.training.use_adam,
+                                        workers=self.ldv_configs.training.workers,
+                                        name=os.path.basename(self.training_source_dir))
+        # '''
 
         self.dummy_print_statement()
 
