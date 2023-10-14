@@ -52,6 +52,7 @@ from ldv_config import LDV_CONFIGS
 sys.path.insert(0, './yolov7')
 from yolov7.train import train_script_importable
 sys.path.pop(0) # Remove the inserted path to keep things clean
+import torch.cuda
 
 __appname__ = 'Label-Detect-Verify'
 
@@ -827,6 +828,8 @@ class MainWindow(QMainWindow, WindowMixin):
         # runs the YOLOv7 train.py, but the importable function version. 
         # Most of these args are set in the ldv_configs or dynamically determined before this point
         # '''
+        _cur_dir = os.getcwd()   # need to change to internal yolov7 directory for this due to relative pathing issues
+        os.chdir('./yolov7')
         _resu = train_script_importable(weights=self.ldv_configs.training.weights_filepath,
                                         cfg=self.ldv_configs.training.cfg_yaml_filepath,
                                         data=data_yaml_filepath,
@@ -836,8 +839,10 @@ class MainWindow(QMainWindow, WindowMixin):
                                         img_size=self.ldv_configs.training.img_input_size,
                                         adam=self.ldv_configs.training.use_adam,
                                         workers=self.ldv_configs.training.workers,
-                                        name=os.path.basename(self.training_source_dir))
+                                        name=os.path.basename(self.training_source_dir),
+                                        device=self.ldv_configs.training.device if torch.cuda.is_available() else '')
         # '''
+        os.chdir(_cur_dir)
 
         self.dummy_print_statement()
 

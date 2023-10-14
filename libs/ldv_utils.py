@@ -143,7 +143,7 @@ def create_data_yaml_file(YOLO_dataset_folder, class_mapping):
     # construct paths
     train_path = os.path.join(YOLO_dataset_folder, 'images', 'train')
     val_path = os.path.join(YOLO_dataset_folder, 'images', 'valid')
-    yaml_save_path = os.path.join(YOLO_dataset_folder, 'dataset_info')
+    yaml_save_path = os.path.join(YOLO_dataset_folder, 'dataset_info.yaml')
 
     # Get class names and number of classes from the mapping
     class_names = sorted(list(class_mapping.keys())) # probably don't need the sorted, but whatever, just ensures previous sorted order

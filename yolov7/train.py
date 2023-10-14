@@ -464,13 +464,13 @@ def train(hyp, opt, device, tb_writer=None):
                 torch.save(ckpt, last)
                 if best_fitness == fi:
                     torch.save(ckpt, best)
-                if (best_fitness == fi) and (epoch >= 200):
+                if (best_fitness == fi) and (epoch >= 500):    # changed to only saving the epoch-conditional best at greater than 500 epochs
                     torch.save(ckpt, wdir / 'best_{:03d}.pt'.format(epoch))
-                if epoch == 0:
+                if epoch < 0:                                 # we don't need to save the initial epoch, so I just changed this to <
                     torch.save(ckpt, wdir / 'epoch_{:03d}.pt'.format(epoch))
-                elif ((epoch+1) % 25) == 0:
+                elif ((epoch+1) % 250) == 0:                   # changed to forcably saving every 250 epochs instead of every 25 epochs, which was way too often
                     torch.save(ckpt, wdir / 'epoch_{:03d}.pt'.format(epoch))
-                elif epoch >= (epochs-5):
+                elif epoch >= (epochs-2):                      # changed to saving the final 2 epochs worth of models regardless of performance. 
                     torch.save(ckpt, wdir / 'epoch_{:03d}.pt'.format(epoch))
                 if wandb_logger.wandb:
                     if ((epoch + 1) % opt.save_period == 0 and not final_epoch) and opt.save_period != -1:
