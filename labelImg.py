@@ -441,6 +441,11 @@ class MainWindow(QMainWindow, WindowMixin):
                                     shortcut=None,
                                     icon=None,
                                     tip=get_str('setRawDirDetail'))
+        ldv_set_project_dir = action(text=get_str('setProjectDir'),
+                                         slot=self.set_project_dir_dialog,
+                                         shortcut=None,
+                                         icon=None,
+                                         tip=get_str('setProjectDirDetail'))
         ldv_set_detected_dir = action(text=get_str('setDetectedDir'),
                                          slot=self.set_detected_dir_dialog,
                                          shortcut=None,
@@ -528,7 +533,7 @@ class MainWindow(QMainWindow, WindowMixin):
                     (detect_raw, move_verified, train_model, test_model,
                      None, ldv_confirm_toggle))
         add_actions(self.menus.ldv_settings,
-                    (ldv_set_raw_dir, ldv_set_detected_dir, ldv_set_training_source_dir, None, ldv_set_optional_verified_dir))
+                    (ldv_set_raw_dir, ldv_set_project_dir, None, ldv_set_optional_verified_dir))
 
         self.menus.file.aboutToShow.connect(self.update_file_menu)
 
@@ -606,9 +611,14 @@ class MainWindow(QMainWindow, WindowMixin):
 
         # LDV Directory Settings loading in
         self.raw_dir = ustr(settings.get(SETTING_RAW_CAPTURES_DIR, None))
+        self.project_dir = ustr(settings.get(SETTING_PROJECT_DIR, None))
+        self.optional_verified_dir = ustr(settings.get(SETTING_OPTIONAL_VERIFIED_DIR, None))
         self.detected_dir = ustr(settings.get(SETTING_DETECTED_CAPTURES_DIR, None))
         self.training_source_dir = ustr(settings.get(SETTING_TRAINING_SOURCE_DIR, None))
-        self.optional_verified_dir = ustr(settings.get(SETTING_OPTIONAL_VERIFIED_DIR, None))
+        self.test_set_dir = ustr(settings.get(SETTING_TEST_SET_DIR, None))
+        self.trained_models_dir = ustr(settings.get(SETTING_TRAINED_MODELS_DIR, None))
+        if self.project_dir is not None and os.path.exists(self.project_dir):
+            self._check_create_set_project_subfolders(set_folders=True)
 
         def xbool(x):
             if isinstance(x, QVariant):
@@ -686,6 +696,60 @@ class MainWindow(QMainWindow, WindowMixin):
             self.statusBar().showMessage('No settings changed. Raw Captures Directory remains %s' % self.raw_dir)
         self.statusBar().show()
 
+    def set_project_dir_dialog(self, _value=False):
+        path = self.project_dir if (self.project_dir is not None) else '.'
+        dir_path = ustr(QFileDialog.getExistingDirectory(self, '%s - Primary Project Directory where other data is stored' % __appname__, 
+                                                    path, QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks))
+        if dir_path is not None and len(dir_path) > 1:
+            self.project_dir = dir_path
+            self.statusBar().showMessage('Changed LDV Settings folder. Project Directory will be %s. Creating subfolders if needed now.' % self.project_dir)
+            self._check_create_set_project_subfolders(set_folders=True) # checks project subfolder structure. If doesn't exist, creates it. After existing, sets all relevant folder paths
+        else:
+            self.statusBar().showMessage('No settings changed. Project Directory remains %s' % self.project_dir)
+        self.statusBar().show()
+
+    def _check_create_set_project_subfolders(self, set_folders=True):
+        """
+        Helper function to ensure that the expected file folder structure in the project directory is correct
+        """
+        try: # ensure that the Project Folder has been properly set
+            assert (self.project_dir is not None) and (os.path.exists(self.project_dir)), \
+                "Project Folder not properly set. Can not create Project subfolders. \n\nPlease use [LDV Settings -> Set Project Folder] before attempting again."
+        except AssertionError as ae:
+            self.show_error_message_box(str(ae)) # Show error message box instead of printing to terminal
+            return None
+        
+        # now that we know Project Folder exists, let's populate with the subfolder structure
+        detected_fldr = os.path.join(self.project_dir, 'detected_captures')  # for the detected captures of this project
+        training_src_fldr = os.path.join(self.project_dir, 'training_source') # for the training source data set of this project
+        trained_models_fldr = os.path.join(self.project_dir, 'trained_models') # for the storage of the trained models of this project
+        test_fldr = os.path.join(self.project_dir, 'test_set') # for the test set of this project ("hard test set")
+
+        # detected captures subfolder
+        if not os.path.exists(detected_fldr):  # if doesn't exist, make it exist
+            os.makedirs(detected_fldr)
+        if set_folders:                        # if we desire to set the folders
+            self.detected_dir = detected_fldr  # either way, it exists now, so set this folder
+
+        # training source subfolder
+        if not os.path.exists(training_src_fldr):  # if doesn't exist, make it exist
+            os.makedirs(training_src_fldr)
+        if set_folders:                        # if we desire to set the folders
+            self.training_source_dir = training_src_fldr  # either way, it exists now, so set this folder
+
+        # trained models subfolder
+        if not os.path.exists(trained_models_fldr):  # if doesn't exist, make it exist
+            os.makedirs(trained_models_fldr)
+        if set_folders:                        # if we desire to set the folders
+            self.trained_models_dir = trained_models_fldr # either way, it exists now, so set this folder
+
+        # test set subfolder
+        if not os.path.exists(test_fldr):  # if doesn't exist, make it exist
+            os.makedirs(test_fldr)
+        if set_folders:                        # if we desire to set the folders
+            self.test_set_dir = test_fldr # either way, it exists now, so set this folder
+        
+
     def set_detected_dir_dialog(self, _value=False):
         path = self.detected_dir if (self.detected_dir is not None) else '.'
         dir_path = ustr(QFileDialog.getExistingDirectory(self, '%s - Directory where Detected Captures will be moved to' % __appname__, 
@@ -747,7 +811,7 @@ class MainWindow(QMainWindow, WindowMixin):
         
         try: # ensure that the Detected Captures folder has been properly set
             assert (self.detected_dir is not None) and (os.path.exists(self.detected_dir)), \
-                "Detected Captures Folder not properly set. Can not perform Detect Raw Captures Action. \n\nPlease use [LDV Settings -> Set Detected Captures Folder] before attempting again."
+                "This Project's Detected Captures Folder not properly set. Can not perform Detect Raw Captures Action. \n\nPlease use [LDV Settings -> Set Project Folder] before attempting again."
         except AssertionError as ae:
             self.show_error_message_box(str(ae))
             return None
@@ -839,7 +903,8 @@ class MainWindow(QMainWindow, WindowMixin):
                                         img_size=self.ldv_configs.training.img_input_size,
                                         adam=self.ldv_configs.training.use_adam,
                                         workers=self.ldv_configs.training.workers,
-                                        name=os.path.basename(self.training_source_dir),
+                                        project=self.trained_models_dir,
+                                        name=self.ldv_configs.training.yolov7_model_type+'_'+os.path.basename(self.project_dir),
                                         device=self.ldv_configs.training.device if torch.cuda.is_available() else '')
         # '''
         os.chdir(_cur_dir)
@@ -1590,9 +1655,12 @@ class MainWindow(QMainWindow, WindowMixin):
         settings[SETTING_LABEL_FILE_FORMAT] = self.label_file_format
 
         settings[SETTING_RAW_CAPTURES_DIR] = self.raw_dir if self.raw_dir and os.path.exists(self.raw_dir) else ''
+        settings[SETTING_PROJECT_DIR] = self.project_dir if self.project_dir and os.path.exists(self.project_dir) else ''
+        settings[SETTING_OPTIONAL_VERIFIED_DIR] = self.optional_verified_dir if self.optional_verified_dir and os.path.exists(self.optional_verified_dir) else ''
         settings[SETTING_DETECTED_CAPTURES_DIR] = self.detected_dir if self.detected_dir and os.path.exists(self.detected_dir) else ''
         settings[SETTING_TRAINING_SOURCE_DIR] = self.training_source_dir if self.training_source_dir and os.path.exists(self.training_source_dir) else ''
-        settings[SETTING_OPTIONAL_VERIFIED_DIR] = self.optional_verified_dir if self.optional_verified_dir and os.path.exists(self.optional_verified_dir) else ''
+        settings[SETTING_TEST_SET_DIR] = self.test_set_dir if self.test_set_dir and os.path.exists(self.test_set_dir) else ''
+        settings[SETTING_TRAINED_MODELS_DIR] = self.trained_models_dir if self.trained_models_dir and os.path.exists(self.trained_models_dir) else ''
 
         settings.save()
 
