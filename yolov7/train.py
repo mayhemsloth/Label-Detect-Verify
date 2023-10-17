@@ -303,7 +303,7 @@ def train(hyp, opt, device, tb_writer=None):
                 f'Using {dataloader.num_workers} dataloader workers\n'
                 f'Logging results to {save_dir}\n'
                 f'Starting training for {epochs} epochs...')
-    torch.save(model, wdir / 'init.pt')
+    # torch.save(model, wdir / 'init.pt') # for LDV use case, we don't need this, it just takes up extra storage space. 
     for epoch in range(start_epoch, epochs):  # epoch ------------------------------------------------------------------
         model.train()
 
@@ -461,9 +461,11 @@ def train(hyp, opt, device, tb_writer=None):
                         'wandb_id': wandb_logger.wandb_run.id if wandb_logger.wandb else None}
 
                 # Save last, best and delete
-                torch.save(ckpt, last)
-                if best_fitness == fi:
+                torch.save(ckpt, last)  # always overwrites the just finished epoch in "last.pt"
+                if best_fitness == fi:  # overwrites the "best.pt" file if this is the best fitness, which is determined almost entirely by mAP0.5-0.95 metric of validation set
                     torch.save(ckpt, best)
+                # for the general LDV use case, we don't want to fill up storage with extra model checkpoints. Ultimately only one checkpoint will be "the model" for this run, and that will likely be "best.pt"
+                ''' 
                 if (best_fitness == fi) and (epoch >= 500):    # changed to only saving the epoch-conditional best at greater than 500 epochs
                     torch.save(ckpt, wdir / 'best_{:03d}.pt'.format(epoch))
                 if epoch < 0:                                 # we don't need to save the initial epoch, so I just changed this to <
@@ -472,6 +474,7 @@ def train(hyp, opt, device, tb_writer=None):
                     torch.save(ckpt, wdir / 'epoch_{:03d}.pt'.format(epoch))
                 elif epoch >= (epochs-2):                      # changed to saving the final 2 epochs worth of models regardless of performance. 
                     torch.save(ckpt, wdir / 'epoch_{:03d}.pt'.format(epoch))
+                '''
                 if wandb_logger.wandb:
                     if ((epoch + 1) % opt.save_period == 0 and not final_epoch) and opt.save_period != -1:
                         wandb_logger.log_model(
@@ -567,7 +570,7 @@ def train_script_importable(
     This function was made by Thomas Hymel during LDV development in Oct 2023 to import the entire train functionality.
     The purpose is to encapsulate the functionality of this train.py script (everything after __name__=='__main__') into a single 
     function that can be imported and used in a different Python script.
-    See the function defintion and comments per line there for descriptions of the arguments
+    See the function definition and comments per line there for descriptions of the arguments
     """
 
     # manually creating the argparse.Namespace object and setting all its attributes

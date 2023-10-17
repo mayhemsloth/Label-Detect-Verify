@@ -1,7 +1,8 @@
+# From LabelImg requirements
 pyqt5
 lxml
-PyYAML>=5.3.1
 
+# From YOLOv7 requirements
 # Base ----------------------------------------
 matplotlib>=3.2.2
 numpy>=1.18.5
@@ -39,3 +40,4 @@ thop  # FLOPs computation
 # albumentations>=1.0.3
 # pycocotools>=2.0  # COCO mAP
 # roboflow
+

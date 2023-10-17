@@ -15,7 +15,7 @@ from utils.plots import plot_one_box
 from utils.torch_utils import select_device, load_classifier, time_synchronized, TracedModel
 
 
-def detect(save_img=False):
+def detect(opt, save_img=False):
     source, weights, view_img, save_txt, imgsz, trace = opt.source, opt.weights, opt.view_img, opt.save_txt, opt.img_size, not opt.no_trace
     save_img = not opt.nosave and not source.endswith('.txt')  # save inference images
     webcam = source.isnumeric() or source.endswith('.txt') or source.lower().startswith(
@@ -162,6 +162,55 @@ def detect(save_img=False):
 
     print(f'Done. ({time.time() - t0:.3f}s)')
 
+import inspect
+def detect_script_importable(
+        weights: str = 'yolov7.pt',          # model.pt weights path
+        source: str = 'inference/images',    # file or folder containing all the images you want to run inference on
+        img_size: int = 640,                 # inference size in pixels. Longest input image size will be scaled to this size. Aspect ratio kept the same, padding added if needed to make square
+        conf_thres: float = 0.25,            # object confidence threshold needed to not get thrown out
+        iou_thres: float = 0.45,             # IOU (Intersection Over Union) threshold for NMS (non-max suppression). Any extra overlapping same-class bboxes, with more than this IOU, will be thrown out
+        device: str = '',                    # cuda device, i.e. 0 or 0,1,2,3 or 'cpu'
+        view_img: bool = False,              # if True, Display results (???)
+        save_txt: bool = False,              # if True, save results to *.txt
+        save_conf: bool = False,             # if True, save class confidences in the save_txt file labels 
+        nosave: bool = False,                # if True, do not save images/videos
+        classes = [],                        # filter by class: --class 0, or --class 0 2 3
+        agnostic_nms: bool = False,          # if True, enables class-agnostic NMS. Which basically means that there can NEVER be ANY overlapping bounding boxes, regardless of differing classes
+        augment: bool = False,               # if True, do augmentation on inference
+        update: bool = False,                # if True, update all models (I don't know what this is)
+        project: str = 'runs/detect',        # saves results to project/name
+        name: str = 'exp',                   # saves results to project/name
+        exist_ok: bool = False,              # if True, existing project/name ok, do not increment. If False, will increment name with number if the project/name exists
+        no_trace: bool = False               # if True, do not trace the model
+):
+    """
+    This function was made by Thomas Hymel during LDV development in Oct 2023 to import the entire detect functionality.
+    The purpose is to encapsulate the functionality of this detect.py script (everything after __name__=='__main__') into a single 
+    function that can be imported and used in a different Python script.
+    See the function definition and comments per line there for descriptions of the arguments
+    """
+
+    # manually creating the argparse.Namespace object and setting all its attributes
+    opt = argparse.Namespace()
+    arg_names = inspect.getfullargspec(detect_script_importable).args # Get the names of the function arguments
+    _locals = locals()
+    for arg in arg_names:
+        setattr(opt, arg, _locals[arg]) # Populate the Namespace object using the function arguments
+
+    # At this point, the opt variable should be in the EXACT state as if it were loaded from the argparse method
+
+    # ------- COPIED FROM if __name__ == '__main__': ------- #
+    print(opt)
+    #check_requirements(exclude=('pycocotools', 'thop'))
+
+    with torch.no_grad():
+        if opt.update:  # update all models (to fix SourceChangeWarning)
+            for opt.weights in ['yolov7.pt']:
+                detect(opt=opt)
+                strip_optimizer(opt.weights)
+        else:
+            detect(opt=opt)
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -190,7 +239,7 @@ if __name__ == '__main__':
     with torch.no_grad():
         if opt.update:  # update all models (to fix SourceChangeWarning)
             for opt.weights in ['yolov7.pt']:
-                detect()
+                detect(opt=opt)
                 strip_optimizer(opt.weights)
         else:
-            detect()
+            detect(opt=opt)

@@ -53,6 +53,7 @@ sys.path.insert(0, './yolov7')
 from yolov7.train import train_script_importable
 sys.path.pop(0) # Remove the inserted path to keep things clean
 import torch.cuda
+from functools import wraps
 
 __appname__ = 'Label-Detect-Verify'
 
@@ -74,7 +75,6 @@ class WindowMixin(object):
             add_actions(toolbar, actions)
         self.addToolBar(Qt.LeftToolBarArea, toolbar)
         return toolbar
-
 
 class MainWindow(QMainWindow, WindowMixin):
     FIT_WINDOW, FIT_WIDTH, MANUAL_ZOOM = list(range(3))
@@ -618,7 +618,7 @@ class MainWindow(QMainWindow, WindowMixin):
         self.test_set_dir = ustr(settings.get(SETTING_TEST_SET_DIR, None))
         self.trained_models_dir = ustr(settings.get(SETTING_TRAINED_MODELS_DIR, None))
         if self.project_dir is not None and os.path.exists(self.project_dir):
-            self._check_create_set_project_subfolders(set_folders=True)
+            self._check_create_set_project_subfolders(set_subfolders=True)
 
         def xbool(x):
             if isinstance(x, QVariant):
@@ -658,7 +658,8 @@ class MainWindow(QMainWindow, WindowMixin):
         Decorator to show a confirmation message box when show_LDV_confirmation is True.
         Usage is decorate any function @confirm_if_needed before the definition of that function
         """
-        def wrapper(self):
+        @wraps(func)
+        def wrapper(self, *args, **kwargs):
             if self.show_LDV_confirmation:
                 msg = QMessageBox()
                 msg.setIcon(QMessageBox.Warning)
@@ -668,11 +669,11 @@ class MainWindow(QMainWindow, WindowMixin):
 
                 result = msg.exec_()
                 if result == QMessageBox.Yes:
-                    return func(self)
+                    return func(self, *args, **kwargs)
             else:
-                return func(self)
+                return func(self, *args, **kwargs)
         return wrapper
-    
+
     def show_error_message_box(self, message):
         """ Simple Helper function to post an error message"""
         msg = QMessageBox()
@@ -680,6 +681,26 @@ class MainWindow(QMainWindow, WindowMixin):
         msg.setText(message)
         msg.setWindowTitle('Error')
         msg.exec_()
+
+    def assert_dirs(dir_attributes): 
+        def decorator(func):
+            @wraps(func)
+            def wrapper(self, *args, **kwargs):
+                dirs_to_message = {'raw_dir': "Raw Captures Folder not properly set. Can not perform LDV Action. \n\nPlease use [LDV Settings -> Set Raw Captures Folder] before attempting again.",
+                                   'project_dir': "Project Folder not properly set. Can not perform LDV Action. \n\nPlease use [LDV Settings -> Set Project Folder] before attempting again.",
+                                   'detected_dir': "This Project's Detected Captures Folder not properly set. Can not perform LDV Action. \n\nPlease use [LDV Settings -> Set Project Folder] before attempting again.",
+                                   'last_open_dir': "No directory currently open. Can not perform Move Verified Action. \n\nPlease use [File -> Open Dir] before attempting again.",
+                                   'training_source_dir': "This Project's Training Source Folder not properly set. Can not perform LDV Action. \n\nPlease use [LDV Settings -> Set Set Project Folder] before attempting again.",
+                                   'test_set_dir': "This Project's Test Set Folder not properly set. Can not perform Test Model Action. \n\nPlease use [LDV Settings -> Set Set Project Folder] before attempting again. "
+                                  }
+                for attr in dir_attributes:
+                    dir_path = getattr(self, attr, None)
+                    if (dir_path is None) or (not os.path.exists(dir_path)):
+                        self.show_error_message_box(dirs_to_message.get(attr, "Something went terribly wrong. Please check assert_dirs code and usage."))
+                        return None
+                return func(self, *args, **kwargs)
+            return wrapper
+        return decorator
 
     def toggle_LDV_confirmation(self):
         self.show_LDV_confirmation = not self.show_LDV_confirmation
@@ -703,12 +724,12 @@ class MainWindow(QMainWindow, WindowMixin):
         if dir_path is not None and len(dir_path) > 1:
             self.project_dir = dir_path
             self.statusBar().showMessage('Changed LDV Settings folder. Project Directory will be %s. Creating subfolders if needed now.' % self.project_dir)
-            self._check_create_set_project_subfolders(set_folders=True) # checks project subfolder structure. If doesn't exist, creates it. After existing, sets all relevant folder paths
+            self._check_create_set_project_subfolders(set_subfolders=True) # checks project subfolder structure. If doesn't exist, creates it. After existing, sets all relevant folder paths
         else:
             self.statusBar().showMessage('No settings changed. Project Directory remains %s' % self.project_dir)
         self.statusBar().show()
 
-    def _check_create_set_project_subfolders(self, set_folders=True):
+    def _check_create_set_project_subfolders(self, set_subfolders=True):
         """
         Helper function to ensure that the expected file folder structure in the project directory is correct
         """
@@ -728,25 +749,25 @@ class MainWindow(QMainWindow, WindowMixin):
         # detected captures subfolder
         if not os.path.exists(detected_fldr):  # if doesn't exist, make it exist
             os.makedirs(detected_fldr)
-        if set_folders:                        # if we desire to set the folders
+        if set_subfolders:                        # if we desire to set the folders
             self.detected_dir = detected_fldr  # either way, it exists now, so set this folder
 
         # training source subfolder
         if not os.path.exists(training_src_fldr):  # if doesn't exist, make it exist
             os.makedirs(training_src_fldr)
-        if set_folders:                        # if we desire to set the folders
+        if set_subfolders:                        # if we desire to set the folders
             self.training_source_dir = training_src_fldr  # either way, it exists now, so set this folder
 
         # trained models subfolder
         if not os.path.exists(trained_models_fldr):  # if doesn't exist, make it exist
             os.makedirs(trained_models_fldr)
-        if set_folders:                        # if we desire to set the folders
+        if set_subfolders:                        # if we desire to set the folders
             self.trained_models_dir = trained_models_fldr # either way, it exists now, so set this folder
 
         # test set subfolder
         if not os.path.exists(test_fldr):  # if doesn't exist, make it exist
             os.makedirs(test_fldr)
-        if set_folders:                        # if we desire to set the folders
+        if set_subfolders:                        # if we desire to set the folders
             self.test_set_dir = test_fldr # either way, it exists now, so set this folder
         
 
@@ -788,68 +809,57 @@ class MainWindow(QMainWindow, WindowMixin):
     def dummy_print_statement(self):
         print("Dummy function has been run.")
     
-    def _move_to_detected_captures(self):
+    def _move_to_detected_captures(self, _value=False):
         """ Function responsible for, after detecting raw captures, 
         moving the detected captures and the associated predictions (if any file exists) into the Detected Captures folder.
         """
-        pass
+        self.dummy_print_statement()
 
     # functions slotted for the primary LDV actions of detect_raw, move_verified, train_model, test_model
+    @assert_dirs(['raw_dir', 'project_dir', 'detected_dir'])
     @confirm_if_needed
-    def detect_raw_func(self):
+    def detect_raw_func(self, _value=False):
         """ 
         Function responsible for the Detect Raw Captures action. 
         Note that this function has two functional parts 1) Uses a YOLOv7 model to detect on Raw Captures folder 2) Moves images to detected captures folder
-        """
-
-        try: # ensure that the Raw Captures folder has been properly set
-            assert (self.raw_dir is not None) and (os.path.exists(self.raw_dir)), \
-                "Raw Captures Folder not properly set. Can not perform Detect Raw Captures Action. \n\nPlease use [LDV Settings -> Set Raw Captures Folder] before attempting again."
-        except AssertionError as ae:
-            self.show_error_message_box(str(ae)) # Show error message box instead of printing to terminal
-            return None
-        
-        try: # ensure that the Detected Captures folder has been properly set
-            assert (self.detected_dir is not None) and (os.path.exists(self.detected_dir)), \
-                "This Project's Detected Captures Folder not properly set. Can not perform Detect Raw Captures Action. \n\nPlease use [LDV Settings -> Set Project Folder] before attempting again."
-        except AssertionError as ae:
-            self.show_error_message_box(str(ae))
-            return None
+        """      
 
         self.dummy_print_statement()
 
+        self._move_to_detected_captures()
+
+    @assert_dirs(['last_open_dir', 'project_dir', 'training_source_dir'])
     @confirm_if_needed
-    def move_verified_func(self):
+    def move_verified_func(self, _value=False):
         """ 
         Function responsible for Move Verified Captures action 
         Moves all VERIFIED images and associated files FROM CURRENTLY OPENED DIR to the TRAINING SOURCE dir
         Optionally, if the self.optional_verified_dir is set than ALSO move a copy to that location as well. 
         """
-        try: # ensure that there is currently a directory open
-            assert self.last_open_dir and os.path.exists(self.last_open_dir), \
-                "No directory currently open. Can not perform Move Verified Action. \n\nPlease use [File -> Open Dir] before attempting again."
-        except AssertionError as ae:
-            self.show_error_message_box(str(ae)) # Show error message box instead of printing to terminal
-            return None
+        # sanity check on the currently open directory (expected to be detected) is in the same project folder as the training source dir.
+        if os.path.dirname(self.last_open_dir) != os.path.dirname(self.training_source_dir):
+            # confirm box for sanity check
+            if self.show_LDV_confirmation:
+                msg = QMessageBox()
+                msg.setIcon(QMessageBox.Warning)
+                msg.setText(f"The currently opened directory (from which verified captures will be moved) does not seem to be in the currently set Project Folder. This may produce project data cross contamination.\n\n Yes to continue. No to exit action entirely without any images moved.")
+                msg.setWindowTitle("Move Verified Sanity Check")
+                msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+                result = msg.exec_()
+                if result == QMessageBox.No:
+                    return None
 
-        try: # ensure that the Training Source Captures folder has been properly set
-            assert self.training_source_dir and (os.path.exists(self.training_source_dir)), \
-                "Training Source Folder not properly set. Can not perform Move Verified Action. \n\nPlease use [LDV Settings -> Set Training Source Folder] before attempting again."
-        except AssertionError as ae:
-            self.show_error_message_box(str(ae)) # Show error message box instead of printing to terminal
-            return None
-        
         if self.optional_verified_dir is not None:
             try: # ensure the optional verified path exists after checking that it's not None
                 if len(self.optional_verified_dir) > 0: #  since this folder is optional, it's fine if it is None. If not, we check if folder exists
                     assert os.path.exists(self.optional_verified_dir), \
-                        f"Optional Verified Output Folder {self.optional_verified_dir} does not exist. Can not perform Move Verified Action. \n\nPlease use [LDV Settings -> (Optional) Set Verified Output Folder] to set an optional additional output folder to copy Verified to."
+                        f"Optional Verified Output Folder {self.optional_verified_dir} path does not exist. Can not perform Move Verified Action. \n\nPlease use [LDV Settings -> (Optional) Set Verified Output Folder] to set an optional additional output folder to copy Verified to."
                     # confirm box for Optional Verified Path
                     if self.show_LDV_confirmation:
                         msg = QMessageBox()
                         msg.setIcon(QMessageBox.Warning)
                         msg.setText(f"An extra copy of the verified images and labels will be moved to {self.optional_verified_dir}. Yes to continue. No to exit action entirely without any images moved.")
-                        msg.setWindowTitle("Move Verified Optional Action Confirmation")
+                        msg.setWindowTitle("Optional Verified Output Confirmation")
                         msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
                         result = msg.exec_()
                         if result == QMessageBox.No:
@@ -869,19 +879,16 @@ class MainWindow(QMainWindow, WindowMixin):
         self.statusBar().showMessage(report_str)
         self.statusBar().show()
 
+    @assert_dirs(['project_dir', 'training_source_dir'])
     @confirm_if_needed
-    def train_model_func(self):
+    def train_model_func(self, _value=False):
         """
         Function responsible for Train Model action
         """
-        try: # ensure that the Training Source Captures folder has been properly set
-            assert (self.training_source_dir is not None) and (os.path.exists(self.training_source_dir)), \
-                "Training Source Folder not properly set. Can not perform Train Model Action. \n\nPlease use [LDV Settings -> Set Training Source Folder] before attempting again."
-        except AssertionError as ae:
-            self.show_error_message_box(str(ae)) # Show error message box instead of printing to terminal
-            return None
-    
+        # TODO: sanity check that there training_source_dir is not empty
+       
         # assumes the temp dataset folder will go into the same folder as the training_source_dir
+        # TODO: could eventually refactor YOLOv7 training code to not NEED to have this structure? Duplicating images temporarily feels bad.
         temp_YOLO_dataset_folder = os.path.join(self.training_source_dir, 'temp')
         class_map, data_yaml_filepath = \
             train_model_file_helper(training_source_folder=self.training_source_dir,
@@ -889,7 +896,7 @@ class MainWindow(QMainWindow, WindowMixin):
                                     model_config_yaml_path=os.path.join('yolov7', self.ldv_configs.training.cfg_yaml_filepath)
             )
 
-        # runs the YOLOv7 train.py, but the importable function version. 
+        # runs YOLOv7 train.py, but the importable function version. 
         # Most of these args are set in the ldv_configs or dynamically determined before this point
         # '''
         _cur_dir = os.getcwd()   # need to change to internal yolov7 directory for this due to relative pathing issues
@@ -906,14 +913,20 @@ class MainWindow(QMainWindow, WindowMixin):
                                         project=self.trained_models_dir,
                                         name=self.ldv_configs.training.yolov7_model_type+'_'+os.path.basename(self.project_dir),
                                         device=self.ldv_configs.training.device if torch.cuda.is_available() else '')
-        # '''
         os.chdir(_cur_dir)
+        # '''
+
+        # TODO: Add popup box confirming training has ended with some information about the model (where it was stored, final mAP?)
 
         self.dummy_print_statement()
 
+    @assert_dirs(['project_dir', 'test_set_dir'])
     @confirm_if_needed
-    def test_model_func(self):
-        """ Function responsible for Test Model action """
+    def test_model_func(self, _value=False):
+        """ 
+        Function responsible for Test Model action
+        """
+
         self.dummy_print_statement()
 
     # ----- END LDV MainWindow Functions added ------ #
