@@ -66,6 +66,7 @@ def detect(opt, save_img=False):
     old_img_w = old_img_h = imgsz
     old_img_b = 1
 
+    imgname_to_img_size = {}
     t0 = time.time()
     for path, img, im0s, vid_cap in dataset:
         img = torch.from_numpy(img).to(device)
@@ -73,6 +74,13 @@ def detect(opt, save_img=False):
         img /= 255.0  # 0 - 255 to 0.0 - 1.0
         if img.ndimension() == 3:
             img = img.unsqueeze(0)
+
+        # added LDV info to extract to return
+        if webcam:
+            pass
+        else:
+            p_ = Path(path)
+            imgname_to_img_size[str(p_.name)] = im0s.shape # dictionary of { 'pic1.jpg' :  tuple of (H,W,Channels) }
 
         # Warmup
         if device.type != 'cpu' and (old_img_b != img.shape[0] or old_img_h != img.shape[2] or old_img_w != img.shape[3]):
@@ -162,6 +170,9 @@ def detect(opt, save_img=False):
 
     print(f'Done. ({time.time() - t0:.3f}s)')
 
+    class_mapping = {name: idx for idx, name in enumerate(names)}
+    return class_mapping, imgname_to_img_size
+
 import inspect
 def detect_script_importable(
         weights: str = 'yolov7.pt',          # model.pt weights path
@@ -174,7 +185,7 @@ def detect_script_importable(
         save_txt: bool = False,              # if True, save results to *.txt
         save_conf: bool = False,             # if True, save class confidences in the save_txt file labels 
         nosave: bool = False,                # if True, do not save images/videos
-        classes = [],                        # filter by class: --class 0, or --class 0 2 3
+        classes = None,                      # filter by class: --class 0, or --class 0 2 3
         agnostic_nms: bool = False,          # if True, enables class-agnostic NMS. Which basically means that there can NEVER be ANY overlapping bounding boxes, regardless of differing classes
         augment: bool = False,               # if True, do augmentation on inference
         update: bool = False,                # if True, update all models (I don't know what this is)
@@ -206,11 +217,12 @@ def detect_script_importable(
     with torch.no_grad():
         if opt.update:  # update all models (to fix SourceChangeWarning)
             for opt.weights in ['yolov7.pt']:
-                detect(opt=opt)
+                cl_map, im2im  = detect(opt=opt)
                 strip_optimizer(opt.weights)
         else:
-            detect(opt=opt)
-
+            cl_map, im2im = detect(opt=opt)
+    
+    return cl_map, im2im
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -239,7 +251,7 @@ if __name__ == '__main__':
     with torch.no_grad():
         if opt.update:  # update all models (to fix SourceChangeWarning)
             for opt.weights in ['yolov7.pt']:
-                detect(opt=opt)
+                cm, _im = detect(opt=opt)
                 strip_optimizer(opt.weights)
         else:
-            detect(opt=opt)
+            cm, _im = detect(opt=opt)

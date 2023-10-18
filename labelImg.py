@@ -47,10 +47,11 @@ from libs.create_ml_io import CreateMLReader
 from libs.create_ml_io import JSON_EXT
 from libs.ustr import ustr
 from libs.hashableQListWidgetItem import HashableQListWidgetItem
-from libs.ldv_utils import move_verified_helper, train_model_file_helper
+from libs.ldv_utils import move_verified_helper, train_model_file_helper, detect_raw_conversion_helper, detect_raw_moving_helper
 from ldv_config import LDV_CONFIGS
 sys.path.insert(0, './yolov7')
 from yolov7.train import train_script_importable
+from yolov7.detect import detect_script_importable
 sys.path.pop(0) # Remove the inserted path to keep things clean
 import torch.cuda
 from functools import wraps
@@ -691,7 +692,8 @@ class MainWindow(QMainWindow, WindowMixin):
                                    'detected_dir': "This Project's Detected Captures Folder not properly set. Can not perform LDV Action. \n\nPlease use [LDV Settings -> Set Project Folder] before attempting again.",
                                    'last_open_dir': "No directory currently open. Can not perform Move Verified Action. \n\nPlease use [File -> Open Dir] before attempting again.",
                                    'training_source_dir': "This Project's Training Source Folder not properly set. Can not perform LDV Action. \n\nPlease use [LDV Settings -> Set Set Project Folder] before attempting again.",
-                                   'test_set_dir': "This Project's Test Set Folder not properly set. Can not perform Test Model Action. \n\nPlease use [LDV Settings -> Set Set Project Folder] before attempting again. "
+                                   'test_set_dir': "This Project's Test Set Folder not properly set. Can not perform Test Model Action. \n\nPlease use [LDV Settings -> Set Set Project Folder] before attempting again. ",
+                                   'trained_models_dir': "This Project's Trained Models Folder not properly set. Can not perform Detect/Test Model Action. \n\nPlease use [LDV Settings -> Set Set Project Folder] before attempting again. "
                                   }
                 for attr in dir_attributes:
                     dir_path = getattr(self, attr, None)
@@ -809,30 +811,55 @@ class MainWindow(QMainWindow, WindowMixin):
     def dummy_print_statement(self):
         print("Dummy function has been run.")
     
-    def _move_to_detected_captures(self, _value=False):
-        """ Function responsible for, after detecting raw captures, 
-        moving the detected captures and the associated predictions (if any file exists) into the Detected Captures folder.
-        """
-        self.dummy_print_statement()
-
     # functions slotted for the primary LDV actions of detect_raw, move_verified, train_model, test_model
     @assert_dirs(['raw_dir', 'project_dir', 'detected_dir'])
     @confirm_if_needed
     def detect_raw_func(self, _value=False):
         """ 
-        Function responsible for the Detect Raw Captures action. 
+        Slottable function responsible for the Detect Raw Captures action. 
         Note that this function has two functional parts 1) Uses a YOLOv7 model to detect on Raw Captures folder 2) Moves images to detected captures folder
-        """      
+        """
 
-        self.dummy_print_statement()
+        #path_to_weights = determine_model_path()
+        #path_to_weights = ''
 
-        self._move_to_detected_captures()
+        # '''
+        # runs YOLOv7 detect.py, but the importable function version. 
+        # Most of these args are set in the ldv_configs or dynamically determined before this point
+        pred_file_name = 'preds'
+        _cur_dir = os.getcwd()   # need to change to internal yolov7 directory for this due to relative pathing issues
+        os.chdir('./yolov7')
+        class_mapping, imgname_to_imgsize = \
+            detect_script_importable(weights="C:\\Users\\thomas\\proj\\ldv\\local_data\\castle_appraiser\\trained_models\\yolov7x_castle_appraiser\\weights\\best.pt",
+                                     source=self.raw_dir,
+                                     img_size=self.ldv_configs.inference.img_input_size,
+                                     conf_thres=self.ldv_configs.inference.confidence_threshold,
+                                     iou_thres=self.ldv_configs.inference.iou_threshold,
+                                     device=self.ldv_configs.inference.device if torch.cuda.is_available() else '',
+                                     nosave=True,
+                                     save_txt=True,
+                                     save_conf=True,
+                                     project=self.project_dir,
+                                     name=pred_file_name,
+                                     no_trace=True
+                                    )
+        os.chdir(_cur_dir)
+
+        # saves the XML files of all images detected (even if no preds were made) to the raw_dir
+        detect_raw_conversion_helper(raw_captures_dir=self.raw_dir,
+                                     pred_labels_dir=os.path.join(self.project_dir, pred_file_name, 'labels'),
+                                     class_mapping=class_mapping,
+                                     imgname_to_imgsize=imgname_to_imgsize
+                                    )
+        # moves all XML file / 
+        detect_raw_moving_helper(raw_captures_dir=self.raw_dir,
+                                 detected_dir=self.detected_dir)
 
     @assert_dirs(['last_open_dir', 'project_dir', 'training_source_dir'])
     @confirm_if_needed
     def move_verified_func(self, _value=False):
         """ 
-        Function responsible for Move Verified Captures action 
+        Slottable function responsible for Move Verified Captures action 
         Moves all VERIFIED images and associated files FROM CURRENTLY OPENED DIR to the TRAINING SOURCE dir
         Optionally, if the self.optional_verified_dir is set than ALSO move a copy to that location as well. 
         """
@@ -883,9 +910,17 @@ class MainWindow(QMainWindow, WindowMixin):
     @confirm_if_needed
     def train_model_func(self, _value=False):
         """
-        Function responsible for Train Model action
+        Slottable tfnction responsible for Train Model action
         """
-        # TODO: sanity check that there training_source_dir is not empty
+        # sanity check that training_source_dir is not empty
+        files = [item for item in os.listdir(self.training_source_dir) if os.path.isfile(os.path.join(self.training_source_dir, item))]         # List all files and subdirectories in the given directory
+        if len(files) == 0:
+            msg = QMessageBox()
+            msg.setIcon(QMessageBox.Warning)
+            msg.setText(f"No files found in this project's training source folder. \n\nIf this is a new project, manually move your initial training set into this project's training source folder before attempting to train.")
+            msg.setWindowTitle("No Training Files Found")
+            msg.exec_()
+            return None
        
         # assumes the temp dataset folder will go into the same folder as the training_source_dir
         # TODO: could eventually refactor YOLOv7 training code to not NEED to have this structure? Duplicating images temporarily feels bad.
@@ -920,12 +955,15 @@ class MainWindow(QMainWindow, WindowMixin):
 
         self.dummy_print_statement()
 
-    @assert_dirs(['project_dir', 'test_set_dir'])
+    @assert_dirs(['project_dir', 'test_set_dir', 'trained_models_dir'])
     @confirm_if_needed
     def test_model_func(self, _value=False):
         """ 
         Function responsible for Test Model action
         """
+        # TODO: sanity check for empty test set dir
+
+        # TODO: sanity check for no saved trained models
 
         self.dummy_print_statement()
 

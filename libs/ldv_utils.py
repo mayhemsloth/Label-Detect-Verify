@@ -5,6 +5,8 @@ import glob
 import yaml
 from xml.etree import ElementTree as ET
 
+IMG_FILE_EXTENSIONS_ = ['bmp', 'jpg', 'jpeg', 'png', 'tif', 'tiff'] # ['bmp', 'jpg', 'jpeg', 'png', 'tif', 'tiff', 'dng', 'webp', 'mpo'] in YOLOv7 loading
+
 def clear_YOLO_dataset_folders(YOLO_dataset_folder):
     """
     Clears the temp YOLO dataset folder
@@ -58,7 +60,7 @@ def copy_files_to_YOLO_dataset_folder(training_source_folder, YOLO_dataset_folde
     Copies only those images that have corresponding XML files
     """
     # Get all image and XML file paths
-    img_extensions = ['jpg', 'jpeg', 'png']
+    img_extensions = IMG_FILE_EXTENSIONS_
     img_files = [glob.glob(os.path.join(training_source_folder, f'*.{ext}')) for ext in img_extensions]
     img_files = [item for sublist in img_files for item in sublist]  # Flatten the list
     xml_files = glob.glob(os.path.join(training_source_folder, '*.xml'))
@@ -256,7 +258,7 @@ def move_verified_helper(last_open_dir, training_source_dir, optional_verified_d
             img_file_with_extension = None  # Initialize
 
             # Search for the image file with the corresponding name, and if found, set and break
-            for ext in ['jpg', 'png', 'jpeg']:
+            for ext in IMG_FILE_EXTENSIONS_:
                 possible_img_file = f"{img_file}.{ext}"
                 if os.path.exists(os.path.join(last_open_dir, possible_img_file)):
                     img_file_with_extension = possible_img_file
@@ -287,4 +289,126 @@ def move_verified_helper(last_open_dir, training_source_dir, optional_verified_d
         report_str += f" Additionally, {num_verified_files_moved} were copied to {optional_verified_dir}"
 
     return report_str
+
+
+def construct_voc_from_yolo_annotations(img_full_path, yolo_annotations, class_mapping, imgsize, difficult_thresh=0.5):
+    """
+    Constructs the ElementTree object for the PASCAL VOC style annotations
+    """
+
+    index_to_class_mapping = {v:k for k,v in class_mapping.items()} # reverses the class mapping {'name': idx} to {idx : 'name'}
+
+    # Create XML root element
+    root = ET.Element('annotation')
+    
+    # Extract image size details
+    height, width, channel = imgsize
+    
+    # Add image metadata
+    ET.SubElement(root, 'folder').text = str(os.path.basename(os.path.dirname(img_full_path))) # gets the last folder name
+    ET.SubElement(root, 'filename').text = str(os.path.basename(img_full_path))  # just the basename with the extension
+    ET.SubElement(root, 'path').text = img_full_path   # the entire file path to the image (which will ultimately be wrong, but that's fine)
+    
+    source = ET.SubElement(root, 'source')
+    ET.SubElement(source, 'database').text = 'Unknown'
+    
+    size = ET.SubElement(root, 'size')
+    ET.SubElement(size, 'width').text = str(width)
+    ET.SubElement(size, 'height').text = str(height)
+    ET.SubElement(size, 'depth').text = str(channel)
+    
+    ET.SubElement(root, 'segmented').text = '0'
+    
+    if yolo_annotations:  # file has already been read. If there was no file, yolo_annotations should be None, so won't enter this part at all. 
+        for line in yolo_annotations:
+            parts = line.strip().split(" ")
+            confidence = None
+            if len(parts) == 6:  # the confidence score could be loaded in the .txt labels file. Let's handle it and integrate it into difficult label later
+                class_idx, x_center, y_center, width_rel, height_rel, confidence = map(float, parts)
+            else:
+                class_idx, x_center, y_center, width_rel, height_rel = map(float, parts)
+            class_idx=int(class_idx)
+            
+            # Convert YOLO to VOC
+            x_center, y_center, width_rel, height_rel = x_center * width, y_center * height, width_rel * width, height_rel * height
+            xmin, ymin, xmax, ymax = x_center - width_rel / 2, y_center - height_rel / 2, x_center + width_rel / 2, y_center + height_rel / 2
+            
+            # Create object element and append to root
+            obj = ET.SubElement(root, 'object')
+            ET.SubElement(obj, 'name').text = index_to_class_mapping.get(class_idx, "Unknown Class")
+            ET.SubElement(obj, 'pose').text = 'Unspecified'
+            ET.SubElement(obj, 'truncated').text = '0'
+            ET.SubElement(obj, 'difficult').text = '1' if confidence and (confidence < difficult_thresh) else '0' # set difficult toggle when confidence under threshold 
+            
+            bbox = ET.SubElement(obj, 'bndbox')
+            ET.SubElement(bbox, 'xmin').text = str(max(0, int(xmin)))
+            ET.SubElement(bbox, 'ymin').text = str(max(0, int(ymin)))
+            ET.SubElement(bbox, 'xmax').text = str(min(width, int(xmax)))
+            ET.SubElement(bbox, 'ymax').text = str(min(height,int(ymax)))
+    
+    return ET.ElementTree(root)
+
+def detect_raw_conversion_helper(raw_captures_dir, pred_labels_dir, class_mapping, imgname_to_imgsize):
+    """
+    The helper function to be imported and used within the Detect Raw Captures Action
+    Helps AFTER the detections have been made by the importable detect.py function, to handle the
+    proper massaging of the output of that function to what we want (PASCAL VOC files in the same folder) 
+
+    Args:
+    - raw_captures_dir (str): directory where the raw captures exist (and have just been detected)
+    - pred_labels_dir (str): directory where the prediction labels are stored in .txt files of the same name as the image
+    - class_mapping (dict): dictionary of {class_names: index}, originally taken from the model.names attribute
+    - imgname_to_imgsize (dict): dictionary of { 'pic1.jpg' :  tuple of (H,W,Channels) } of all images that were predicted
+
+    Returns:
+    - None
+    """
+
+    # iterate through the image names that were known to have existed during the detection. 
+    # Note, if no preds were made by model, no labels file would be created. We still want to handle this case and produce an "no labels" voc file
+    for imgname, imgsize in imgname_to_imgsize.items():
+        # path preparation
+        img_full_path = os.path.join(raw_captures_dir, imgname)
+        imgname_wo_ext, _ = os.path.splitext(imgname)
+        labels_txt_full_path = os.path.join(pred_labels_dir, imgname_wo_ext+'.txt')   # expected in the prediction labels directory
+        labels_xml_full_path = os.path.join(raw_captures_dir, imgname_wo_ext+'.xml')  # saving xml file to the raw captures directory, because it will be moved together with images to detected captures
+
+        yolo_annotations = None
+        if os.path.exists(labels_txt_full_path): # in the case where there EXISTS a labels text file with predictions
+            try: # Read YOLO annotation lines from txt file
+                with open(labels_txt_full_path, 'r') as f:
+                    yolo_annotations = f.readlines()
+            except Exception as e:
+                print(f"An error {e} occured while attempting to load {labels_txt_full_path} which should exist.")
+        xml_etree = construct_voc_from_yolo_annotations(img_full_path, yolo_annotations, class_mapping, imgsize)
+        xml_etree.write(labels_xml_full_path)  # write the ElementTree object to XML file
+
+def detect_raw_moving_helper(raw_captures_dir, detected_dir):
+    """
+    The helper function to be imported and used within the Detect Raw Captures Action
+    Helps after the XML files have been created in the raw_captures_dir, and identifies and moves all the XML/image pairs
+    into detected_dir. 
+
+    Args:
+    - raw_captures_dir (str):
+    - detected_dir (str): 
+    """
+
+    xml_files = [f for f in os.listdir(raw_captures_dir) if f.endswith('.xml')]
+    for xml_file in xml_files:
+        xml_path = os.path.join(raw_captures_dir, xml_file)
+
+        # parse the XML to get the associated image filename
+        tree = ET.parse(xml_path)
+        root = tree.getroot()
+        image_filename = root.find('filename').text
+        
+        image_path = os.path.join(raw_captures_dir, image_filename)
+
+        # move the XML and image files to detected_dir
+        if os.path.exists(image_path):
+            shutil.move(xml_path, os.path.join(detected_dir, xml_file))
+            shutil.move(image_path, os.path.join(detected_dir, image_filename))
+        else:
+            print(f"Image file {image_filename} not found for {xml_file}")
     
