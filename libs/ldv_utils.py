@@ -395,6 +395,7 @@ def detect_raw_moving_helper(raw_captures_dir, detected_dir):
     """
 
     xml_files = [f for f in os.listdir(raw_captures_dir) if f.endswith('.xml')]
+    moving_counter = 0
     for xml_file in xml_files:
         xml_path = os.path.join(raw_captures_dir, xml_file)
 
@@ -407,8 +408,14 @@ def detect_raw_moving_helper(raw_captures_dir, detected_dir):
 
         # move the XML and image files to detected_dir
         if os.path.exists(image_path):
+            moving_counter += 1
             shutil.move(xml_path, os.path.join(detected_dir, xml_file))
             shutil.move(image_path, os.path.join(detected_dir, image_filename))
         else:
             print(f"Image file {image_filename} not found for {xml_file}")
+
+    # construct final report str
+    report_str = f"Of the {len(xml_files)} XML files found in the Raw Captures directory, {moving_counter} XML files and their associated images were moved to the Detected Captures"
+
+    return report_str
     

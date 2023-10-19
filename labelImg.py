@@ -841,7 +841,8 @@ class MainWindow(QMainWindow, WindowMixin):
                                      save_conf=True,
                                      project=self.project_dir,
                                      name=pred_file_name,
-                                     no_trace=True
+                                     no_trace=True,
+                                     exist_ok=True
                                     )
         os.chdir(_cur_dir)
 
@@ -851,9 +852,16 @@ class MainWindow(QMainWindow, WindowMixin):
                                      class_mapping=class_mapping,
                                      imgname_to_imgsize=imgname_to_imgsize
                                     )
-        # moves all XML file / 
-        detect_raw_moving_helper(raw_captures_dir=self.raw_dir,
-                                 detected_dir=self.detected_dir)
+        # moves all XML file + image files into the detected_dir
+        report_str = detect_raw_moving_helper(raw_captures_dir=self.raw_dir,
+                                              detected_dir=self.detected_dir)
+        
+        # reload/update the current directory in the GUI because some images will almost certainly have moved into the detected folder,
+        # If the last open dir is the detected folder, then it will show up with the images/XMLs now after detecting.  
+        self.import_dir_images(self.last_open_dir)
+        
+        self.statusBar().showMessage(report_str)
+        self.statusBar().show()
 
     @assert_dirs(['last_open_dir', 'project_dir', 'training_source_dir'])
     @confirm_if_needed
@@ -865,8 +873,7 @@ class MainWindow(QMainWindow, WindowMixin):
         """
         # sanity check on the currently open directory (expected to be detected) is in the same project folder as the training source dir.
         if os.path.dirname(self.last_open_dir) != os.path.dirname(self.training_source_dir):
-            # confirm box for sanity check
-            if self.show_LDV_confirmation:
+            if self.show_LDV_confirmation: # confirm box for sanity check
                 msg = QMessageBox()
                 msg.setIcon(QMessageBox.Warning)
                 msg.setText(f"The currently opened directory (from which verified captures will be moved) does not seem to be in the currently set Project Folder. This may produce project data cross contamination.\n\n Yes to continue. No to exit action entirely without any images moved.")
@@ -881,8 +888,7 @@ class MainWindow(QMainWindow, WindowMixin):
                 if len(self.optional_verified_dir) > 0: #  since this folder is optional, it's fine if it is None. If not, we check if folder exists
                     assert os.path.exists(self.optional_verified_dir), \
                         f"Optional Verified Output Folder {self.optional_verified_dir} path does not exist. Can not perform Move Verified Action. \n\nPlease use [LDV Settings -> (Optional) Set Verified Output Folder] to set an optional additional output folder to copy Verified to."
-                    # confirm box for Optional Verified Path
-                    if self.show_LDV_confirmation:
+                    if self.show_LDV_confirmation: # confirm box for Optional Verified Path
                         msg = QMessageBox()
                         msg.setIcon(QMessageBox.Warning)
                         msg.setText(f"An extra copy of the verified images and labels will be moved to {self.optional_verified_dir}. Yes to continue. No to exit action entirely without any images moved.")
@@ -900,7 +906,7 @@ class MainWindow(QMainWindow, WindowMixin):
                                           training_source_dir=self.training_source_dir,
                                           optional_verified_dir=self.optional_verified_dir)
         
-        # reload/update the current directory in the GUI because some verified images will almost certainly have moved       
+        # reload/update the current directory in the GUI because some verified images will almost certainly have moved     
         self.import_dir_images(self.last_open_dir)
         
         self.statusBar().showMessage(report_str)
