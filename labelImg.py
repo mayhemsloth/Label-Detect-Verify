@@ -47,17 +47,17 @@ from libs.create_ml_io import CreateMLReader
 from libs.create_ml_io import JSON_EXT
 from libs.ustr import ustr
 from libs.hashableQListWidgetItem import HashableQListWidgetItem
-from libs.ldv_utils import move_verified_helper, train_model_file_helper, detect_raw_conversion_helper, detect_raw_moving_helper
+from libs.ldv_utils import move_verified_helper, train_model_file_helper, detect_raw_conversion_helper, detect_raw_moving_helper, test_model_file_helper, IMG_FILE_EXTENSIONS_
 from ldv_config import LDV_CONFIGS
 sys.path.insert(0, './yolov7')
 from yolov7.train import train_script_importable
 from yolov7.detect import detect_script_importable
+from yolov7.test import test_script_importable
 sys.path.pop(0) # Remove the inserted path to keep things clean
 import torch.cuda
 from functools import wraps
 
 __appname__ = 'Label-Detect-Verify'
-
 
 class WindowMixin(object):
 
@@ -95,7 +95,7 @@ class MainWindow(QMainWindow, WindowMixin):
         self.string_bundle = StringBundle.get_bundle()
         get_str = lambda str_id: self.string_bundle.get_string(str_id)
 
-        # Load LDV configs as an attribute
+        # Store the python file imported LDV configs constant as an attribute
         self.ldv_configs = LDV_CONFIGS
 
         # Save as Pascal voc xml
@@ -436,7 +436,7 @@ class MainWindow(QMainWindow, WindowMixin):
                             icon='test_model',
                             tip=get_str('testModelDetail'))
         
-        # actions for configuring the settings of LDV # raw_dir, detected_dir, training_source_dir, optional_verified_dir
+        # actions for configuring the settings of LDV # raw_dir, project_dir, optional_verified_dir 
         ldv_set_raw_dir = action(text=get_str('setRawDir'),
                                     slot=self.set_raw_dir_dialog,
                                     shortcut=None,
@@ -462,6 +462,11 @@ class MainWindow(QMainWindow, WindowMixin):
                                                 shortcut=None,
                                                 icon=None,
                                                 tip=get_str('setOptionalVerifiedOutputDirDetail'))
+        ldv_set_selected_model_dir = action(text=get_str('setSelectedModelDir'),
+                                          slot=self.set_selected_model_dir_dialog,
+                                          shortcut=None,
+                                          icon=None,
+                                          tip=get_str('setSelectedModelDirDetail'))
         
         # ------ END LDV Additional Actions ------
         
@@ -534,7 +539,7 @@ class MainWindow(QMainWindow, WindowMixin):
                     (detect_raw, move_verified, train_model, test_model,
                      None, ldv_confirm_toggle))
         add_actions(self.menus.ldv_settings,
-                    (ldv_set_raw_dir, ldv_set_project_dir, None, ldv_set_optional_verified_dir))
+                    (ldv_set_raw_dir, ldv_set_project_dir, None, ldv_set_selected_model_dir, ldv_set_optional_verified_dir))
 
         self.menus.file.aboutToShow.connect(self.update_file_menu)
 
@@ -613,6 +618,7 @@ class MainWindow(QMainWindow, WindowMixin):
         # LDV Directory Settings loading in
         self.raw_dir = ustr(settings.get(SETTING_RAW_CAPTURES_DIR, None))
         self.project_dir = ustr(settings.get(SETTING_PROJECT_DIR, None))
+        self.selected_model_dir = ustr(settings.get(SETTING_SELECTED_MODEL_DIR, None))
         self.optional_verified_dir = ustr(settings.get(SETTING_OPTIONAL_VERIFIED_DIR, None))
         self.detected_dir = ustr(settings.get(SETTING_DETECTED_CAPTURES_DIR, None))
         self.training_source_dir = ustr(settings.get(SETTING_TRAINING_SOURCE_DIR, None))
@@ -652,6 +658,10 @@ class MainWindow(QMainWindow, WindowMixin):
         # Open Dir if default file
         if self.file_path and os.path.isdir(self.file_path):
             self.open_dir_dialog(dir_path=self.file_path, silent=True)
+
+        # load/show images upon loading program of last open dir
+        if self.last_open_dir is not None:
+            self.import_dir_images(self.last_open_dir)
 
     # ----- START LDV MainWindow Functions added ------ #
     def confirm_if_needed(func):
@@ -772,6 +782,17 @@ class MainWindow(QMainWindow, WindowMixin):
         if set_subfolders:                        # if we desire to set the folders
             self.test_set_dir = test_fldr # either way, it exists now, so set this folder
         
+    def set_selected_model_dir_dialog(self, _value=False):
+        path = self.selected_model_dir if (self.selected_model_dir is not None) else '.'
+        dir_path = ustr(QFileDialog.getExistingDirectory(self, '%s - Select Model Directory for Detection and Testing' % __appname__, 
+                                                         path, QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks))
+        if dir_path is not None and len(dir_path) > 1:
+            self.selected_model_dir = dir_path
+            self.statusBar().showMessage('Changed LDV Settings folder. Selected Model Directory will be %s' % self.selected_model_dir)
+        else:
+            self.selected_model_dir = None
+            self.statusBar().showMessage(f'Changed LDV Settings folder. Cleared the Selected Model Directory. Will be chosen automatically if not manually set.')
+        self.statusBar().show()
 
     def set_detected_dir_dialog(self, _value=False):
         path = self.detected_dir if (self.detected_dir is not None) else '.'
@@ -808,29 +829,93 @@ class MainWindow(QMainWindow, WindowMixin):
         self.statusBar().show()
 
     # Functions for Main LDV Actions
-    def dummy_print_statement(self):
-        print("Dummy function has been run.")
-    
+    def _auto_choose_selected_model_dir(self):
+        """
+        Helper function to automatically choose the model selected for Detect Raw Captures and Test Model, i.e., selected_model_dir
+        If selected_model_dir is already a valid selection, will do nothing and return selected_model_dir.
+        If selected_model_dir is not set properly, will automatically select a model based on results file in the models in the project dir.
+        If there are no models to choose from in trained_models_dir, return None. 
+        """
+
+        # checking for already valid selected_model_dir 
+        if self.selected_model_dir \
+            and os.path.exists(self.selected_model_dir) \
+            and os.path.exists(os.path.join(self.selected_model_dir,'weights','best.pt')):
+            # the selected model directory has been chosen correctly and contains the expected '/weights/best.pt' file that will be loaded
+            # Nothing needs to be changed or set, early exit
+            return self.selected_model_dir
+        
+        # in the case where we need to automatically chose and set self.selected_model_dir
+        # sanity check for no saved trained models. early exit if no valid trained model folders
+        model_folders = [item for item in os.listdir(self.trained_models_dir) if os.path.isdir(os.path.join(self.trained_models_dir, item))]         # List all files and subdirectories in the given directory
+        # grab the valid 'result.txt' files and associated model name in dict, only if results file and 'weights/best.pt' exists
+        model_name_to_results_path = {model_name : os.path.join(self.trained_models_dir, model_name, 'results.txt') for model_name in model_folders \
+                                      if os.path.exists(os.path.join(self.trained_models_dir, model_name, 'results.txt'))\
+                                      and os.path.exists(os.path.join(self.trained_models_dir, model_name, 'weights', 'best.pt'))}
+        if len(model_name_to_results_path) == 0:
+            msg = QMessageBox()
+            msg.setIcon(QMessageBox.Warning)
+            msg.setText(f"No valid models for automatic selection found in this project's Trained Models folder. \n\nIf this is a new project, ensure you Train Model at least once before before attempting to detect or test.")
+            msg.setWindowTitle("No Valid Trained Models Found")
+            msg.exec_()
+            return None
+        
+        # in the case where at least one valid trained model folder exists in the trained_models_dir
+        best_model_name = ''
+        best_model_performance = -1.0
+
+        for model_name, results_path in model_name_to_results_path.items():
+            # parse the relevant numbers from results.txt path
+            mAP50s, mAP50_95s = [], []
+            with open(results_path, "r") as f:
+                for line in f:
+                    parts = line.split() # Split the line into parts separated by spaces
+                    mAP50s.append(float(parts[10])) # the 10th index has validation set mAP@0.50
+                    mAP50_95s.append(float(parts[11])) # the 11th index has validation set mAP@0.50-0.95
+            weighted_sum = [0.1*mAP50 + 0.9*mAP50_95 for mAP50, mAP50_95 in zip(mAP50s, mAP50_95s)]  # the 0.1, 0.9 numbers come from the original YOLOv7 fitness weighting to determine "best" model
+            this_max_val = max(weighted_sum)
+            if this_max_val > best_model_performance: # if this model's performance is better than best, record that
+                best_model_name = model_name
+                best_model_performance = this_max_val
+
+        # set the selected_model_dir based on the selection criteria above (best criterion from ITS OWN validation set during training)
+        self.selected_model_dir = os.path.join(self.trained_models_dir, best_model_name)
+        return self.selected_model_dir
+
     # functions slotted for the primary LDV actions of detect_raw, move_verified, train_model, test_model
-    @assert_dirs(['raw_dir', 'project_dir', 'detected_dir'])
+    @assert_dirs(['raw_dir', 'project_dir', 'detected_dir', 'trained_models_dir'])
     @confirm_if_needed
     def detect_raw_func(self, _value=False):
         """ 
         Slottable function responsible for the Detect Raw Captures action. 
-        Note that this function has two functional parts 1) Uses a YOLOv7 model to detect on Raw Captures folder 2) Moves images to detected captures folder
+        Note that this function has two functional parts:
+        1) Uses a YOLOv7 model to detect on Raw Captures folder 
+        2) Moves images from predictions folder to detected captures folder
         """
+        
+        # check if any valid images are in raw_dir and gracefully exit if none are found
+        all_files = os.listdir(self.raw_dir)
+        valid_images = [os.path.join(self.raw_dir, fi) for fi in all_files if any(fi.endswith(f'.{ext}') for ext in IMG_FILE_EXTENSIONS_)]
+        if len(valid_images) == 0:
+            msg = QMessageBox()
+            msg.setIcon(QMessageBox.Warning)
+            msg.setText(f"No valid image files found in the Raw Captures Folder. No need to run Detect Raw Captures. \n\nNote that valid image types are {IMG_FILE_EXTENSIONS_}.")
+            msg.setWindowTitle("No Valid Images Found in Raw Captures Folder")
+            msg.exec_()
+            return None
 
-        #path_to_weights = determine_model_path()
-        #path_to_weights = ''
+        # check the selected_model_dir and choose if not
+        _auto_choice = self._auto_choose_selected_model_dir()
+        if _auto_choice is None: # there are no valid models to automatically choose from, pop-up has already been shown
+            return None
 
-        # '''
         # runs YOLOv7 detect.py, but the importable function version. 
         # Most of these args are set in the ldv_configs or dynamically determined before this point
-        pred_file_name = 'preds'
+        pred_file_name = 'predictions'
         _cur_dir = os.getcwd()   # need to change to internal yolov7 directory for this due to relative pathing issues
         os.chdir('./yolov7')
         class_mapping, imgname_to_imgsize = \
-            detect_script_importable(weights="C:\\Users\\thomas\\proj\\ldv\\local_data\\castle_appraiser\\trained_models\\yolov7x_castle_appraiser\\weights\\best.pt",
+            detect_script_importable(weights=os.path.join(self.selected_model_dir, 'weights', 'best.pt'),
                                      source=self.raw_dir,
                                      img_size=self.ldv_configs.inference.img_input_size,
                                      conf_thres=self.ldv_configs.inference.confidence_threshold,
@@ -852,7 +937,8 @@ class MainWindow(QMainWindow, WindowMixin):
                                      class_mapping=class_mapping,
                                      imgname_to_imgsize=imgname_to_imgsize
                                     )
-        # moves all XML file + image files into the detected_dir
+        
+        # moves all XML file + image files from the raw_dir into the detected_dir
         report_str = detect_raw_moving_helper(raw_captures_dir=self.raw_dir,
                                               detected_dir=self.detected_dir)
         
@@ -912,14 +998,14 @@ class MainWindow(QMainWindow, WindowMixin):
         self.statusBar().showMessage(report_str)
         self.statusBar().show()
 
-    @assert_dirs(['project_dir', 'training_source_dir'])
+    @assert_dirs(['project_dir', 'training_source_dir', 'trained_models_dir'])
     @confirm_if_needed
     def train_model_func(self, _value=False):
         """
-        Slottable tfnction responsible for Train Model action
+        Slottable function responsible for Train Model action
         """
         # sanity check that training_source_dir is not empty
-        files = [item for item in os.listdir(self.training_source_dir) if os.path.isfile(os.path.join(self.training_source_dir, item))]         # List all files and subdirectories in the given directory
+        files = [item for item in os.listdir(self.training_source_dir) if os.path.isfile(os.path.join(self.training_source_dir, item))] # List all files and subdirectories in the given directory
         if len(files) == 0:
             msg = QMessageBox()
             msg.setIcon(QMessageBox.Warning)
@@ -939,7 +1025,6 @@ class MainWindow(QMainWindow, WindowMixin):
 
         # runs YOLOv7 train.py, but the importable function version. 
         # Most of these args are set in the ldv_configs or dynamically determined before this point
-        # '''
         _cur_dir = os.getcwd()   # need to change to internal yolov7 directory for this due to relative pathing issues
         os.chdir('./yolov7')
         _resu = train_script_importable(weights=self.ldv_configs.training.weights_filepath,
@@ -955,23 +1040,70 @@ class MainWindow(QMainWindow, WindowMixin):
                                         name=self.ldv_configs.training.yolov7_model_type+'_'+os.path.basename(self.project_dir),
                                         device=self.ldv_configs.training.device if torch.cuda.is_available() else '')
         os.chdir(_cur_dir)
-        # '''
 
         # TODO: Add popup box confirming training has ended with some information about the model (where it was stored, final mAP?)
-
-        self.dummy_print_statement()
 
     @assert_dirs(['project_dir', 'test_set_dir', 'trained_models_dir'])
     @confirm_if_needed
     def test_model_func(self, _value=False):
         """ 
-        Function responsible for Test Model action
+        Slottable function responsible for Test Model action
         """
-        # TODO: sanity check for empty test set dir
+        # sanity check that test_set_dir is not empty
+        files = [item for item in os.listdir(self.test_set_dir) if os.path.isfile(os.path.join(self.test_set_dir, item))]         # List all files and subdirectories in the given directory
+        if len(files) == 0:
+            msg = QMessageBox()
+            msg.setIcon(QMessageBox.Warning)
+            msg.setText(f"No files found in this project's Test Set folder. \n\nIf this is a new project, manually move your Test Set (images and labels) into this project's Test Set folder before attempting to test.")
+            msg.setWindowTitle("No Test Set Files Found")
+            msg.exec_()
+            return None
+        
+        # check to ensure 'dataset_info.yaml' is available to pull information from (about the number of classes). It should be.
+        training_source_data_yaml_path = os.path.join(self.training_source_dir, 'temp', 'dataset_info.yaml')
+        if not os.path.exists(training_source_data_yaml_path):
+            msg = QMessageBox()
+            msg.setIcon(QMessageBox.Warning)
+            msg.setText(f"No dataset_info.yaml file found in 'temp' folder of training source directory ({self.training_source_dir}). Pleas ensure a proper training run has been done before testing models.")
+            msg.setWindowTitle("No DataSet Info Found")
+            msg.exec_()
+            return None
 
-        # TODO: sanity check for no saved trained models
+        # check the selected_model_dir and choose if not.
+        _auto_choice = self._auto_choose_selected_model_dir()
+        if _auto_choice is None: # there are no valid models to automatically choose from, pop-up has already been shown
+            return None
+        
+        temp_test_folder = os.path.join(self.test_set_dir, 'temp')  # where the YOLO compatible test set folder structure will be copied to
+        test_set_yaml_path = test_model_file_helper(test_set_folder=self.test_set_dir,
+                                                    temp_test_folder=temp_test_folder,
+                                                    training_source_data_yaml_path=training_source_data_yaml_path
+                                                    )
 
-        self.dummy_print_statement()
+        # '''
+        _cur_dir = os.getcwd()   # need to change to internal yolov7 directory for this due to relative pathing issues
+        os.chdir('./yolov7')
+        test_script_importable(weights=os.path.join(self.selected_model_dir, 'weights', 'best.pt'),
+                               data=test_set_yaml_path,
+                               batch_size=self.ldv_configs.inference.batch_size,
+                               img_size=self.ldv_configs.inference.img_input_size,
+                               conf_thres=self.ldv_configs.inference.confidence_threshold,
+                               iou_thres=self.ldv_configs.inference.iou_threshold,
+                               task='test',
+                               project=self.selected_model_dir,                       # recall that results are saved in project/name folder
+                               name=os.path.basename(self.test_set_dir)+'_results',   # so here, saved in /model_name/test_set_results folder
+                               save_txt=True,
+                               save_hybrid=True,
+                               save_conf=True,
+                               exist_ok=self.ldv_configs.inference.overwrite_test_set_res,
+                               device=self.ldv_configs.training.device if torch.cuda.is_available() else '',
+                               single_cls=False,
+                               augment=False,
+                               verbose=False,
+                               save_json=False,
+                               no_trace=True)
+        os.chdir(_cur_dir)
+        # '''
 
     # ----- END LDV MainWindow Functions added ------ #
 
@@ -1713,6 +1845,7 @@ class MainWindow(QMainWindow, WindowMixin):
 
         settings[SETTING_RAW_CAPTURES_DIR] = self.raw_dir if self.raw_dir and os.path.exists(self.raw_dir) else ''
         settings[SETTING_PROJECT_DIR] = self.project_dir if self.project_dir and os.path.exists(self.project_dir) else ''
+        settings[SETTING_SELECTED_MODEL_DIR] = self.selected_model_dir if self.selected_model_dir and os.path.exists(self.selected_model_dir) else ''
         settings[SETTING_OPTIONAL_VERIFIED_DIR] = self.optional_verified_dir if self.optional_verified_dir and os.path.exists(self.optional_verified_dir) else ''
         settings[SETTING_DETECTED_CAPTURES_DIR] = self.detected_dir if self.detected_dir and os.path.exists(self.detected_dir) else ''
         settings[SETTING_TRAINING_SOURCE_DIR] = self.training_source_dir if self.training_source_dir and os.path.exists(self.training_source_dir) else ''
@@ -1747,11 +1880,13 @@ class MainWindow(QMainWindow, WindowMixin):
         dir_path = ustr(QFileDialog.getExistingDirectory(self,
                                                          '%s - Save annotations to the directory' % __appname__, path,  QFileDialog.ShowDirsOnly
                                                          | QFileDialog.DontResolveSymlinks))
+        selected_same_folder = dir_path == path
 
-        if dir_path is not None and len(dir_path) > 1:
+        if dir_path is not None and len(dir_path) > 1: # user selected something, and did not hit Cancel
             self.default_save_dir = dir_path
 
-        self.show_bounding_box_from_annotation_file(self.file_path)
+        if dir_path and (not selected_same_folder): # only populate in the case where the newly selected path is different and NOT cancelled
+            self.show_bounding_box_from_annotation_file(self.file_path)
 
         self.statusBar().showMessage('%s . Annotation will be saved to %s' %
                                      ('Change saved folder', self.default_save_dir))
@@ -1798,12 +1933,13 @@ class MainWindow(QMainWindow, WindowMixin):
             target_dir_path = ustr(QFileDialog.getExistingDirectory(self,
                                                                     '%s - Open Directory' % __appname__, default_open_dir_path,
                                                                     QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks))
+            selected_same_folder = target_dir_path == default_open_dir_path
         else:
             target_dir_path = ustr(default_open_dir_path)
-        self.last_open_dir = target_dir_path
-        self.import_dir_images(target_dir_path)
-        self.default_save_dir = target_dir_path
-        if self.file_path:
+        self.last_open_dir = target_dir_path if target_dir_path else default_open_dir_path
+        self.import_dir_images(target_dir_path)  # not doing the bool check HERE means that if user hit cancel (no new Open Dir selected) then we don't do any importing
+        self.default_save_dir = target_dir_path if target_dir_path else default_open_dir_path
+        if self.file_path and (target_dir_path) and (not selected_same_folder):
             self.show_bounding_box_from_annotation_file(file_path=self.file_path)
 
     def import_dir_images(self, dir_path):

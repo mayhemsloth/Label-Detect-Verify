@@ -534,7 +534,7 @@ def train_script_importable(
         hyp: str = 'data/hyp.scratch.p5.yam', # hyperparameters yaml path
         epochs: int = 500,                    # total training epochs
         batch_size: int = 16,                 # total batch size for all GPUs
-        img_size = [640,640],                 # [train, test] image sizes. [1280, 640] means (1280,1280) for training and (640,640) for testing
+        img_size = [640,640],                 # [train, val] image sizes. [1280, 640] means (1280,1280) for training and (640,640) for validation
         rect: bool = False,                   # rectangular training
         resume = False,                       # resume most recent training. Can be False, True, or a str path to a different training folder
         nosave: bool = False,                 # if True, save only final checkpoint

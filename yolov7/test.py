@@ -40,7 +40,12 @@ def test(data,
          half_precision=True,
          trace=False,
          is_coco=False,
-         v5_metric=False):
+         v5_metric=False,
+         opt_through=None): # added for LDV compatibility
+    # opt var problem resolved
+    if opt_through:  # if you passed the opt object through, assign it. Else assume it is in the namespace, as original test function as written
+        opt = opt_through
+        
     # Initialize/load model and set device
     training = model is not None
     if training:  # called by train.py
@@ -96,6 +101,10 @@ def test(data,
     seen = 0
     confusion_matrix = ConfusionMatrix(nc=nc)
     names = {k: v for k, v in enumerate(model.names if hasattr(model, 'names') else model.module.names)}
+    if not single_cls: 
+        # this assertion was added in LDV, because there is a potential weird situation where newly added test set classes is being tested with a model that has old data, or vice versa.
+        # When testing via LDV Test Model action, the YAML file, which produces the nc var, will always be pulled from the most recent training source dataset YAML file  
+        assert len(names) == nc, f"Number of classes ({len(names)} names) from model is NOT the same as number of classes ({nc}) from YAML file. Please use a model associated with recent training."
     coco91class = coco80_to_coco91_class()
     s = ('%20s' + '%12s' * 6) % ('Class', 'Images', 'Labels', 'P', 'R', 'mAP@.5', 'mAP@.5:.95')
     p, r, f1, mp, mr, map50, map, t0, t1 = 0., 0., 0., 0., 0., 0., 0., 0., 0.
@@ -286,6 +295,85 @@ def test(data,
         maps[c] = ap[i]
     return (mp, mr, map50, map, *(loss.cpu() / len(dataloader)).tolist()), maps, t
 
+import inspect
+def test_script_importable(
+        weights: str = 'yolov7.pt',    # weights path to load
+        data: str = 'data/coco.yaml',  # yaml data path specifying the location of the test data set folder structure
+        batch_size: int = 32,          # batch size of images during testing
+        img_size: int = 640,           # inference size (pixels)
+        conf_thres: float = 0.001,     # object confidence threshold. Below this number, throw out all detections
+        iou_thres: float = 0.65,       # IOU (Intersection Over Union) threshold for NMS (non-max suppression)
+        task: str = 'val',             # train, val, test, speed, or study are the valid options. 
+        device: str = '',              # cuda device, i.e. 0 or 0,1,2,3 or cpu
+        single_cls: bool = False,      # if True, treat multi-class data as a single-class dataset
+        augment: bool = False,         # if True, use augmentatations for inference
+        verbose: bool = False,         # if True, report mAP by class
+        save_txt: bool = False,        # if True, save results to '*.txt'
+        save_hybrid: bool = False,     # if True, save label+prediction hybrid results to '*.txt'
+        save_conf: bool = False,       # if True, save confidences in the save_txt labels file
+        save_json: bool = False,       # if True, save a cocoapi-compatible JSON results file
+        project: str = 'runs/test',    # saves to project/name
+        name: str = 'exp',             # saves to project/name
+        exist_ok: bool = False,        # if True, the existing project/name will be overwritten. If False, increment with number when encountering the same name
+        no_trace: bool = False,        # if True, do not trace the model
+        v5_metric: bool = False,       # if True, assume maximum recall as 1.0 in AP calculations
+):
+    """
+    This function was made by Thomas Hymel during LDV development in Oct 2023 to import the entire test functionality.
+    The purpose is to encapsulate the functionality of this test.py script (everything after __name__=='__main__') into a single 
+    function that can be imported and used in a different Python script.
+    See the function definition and comments per line there for descriptions of the arguments
+    """
+
+    # manually creating the argparse.Namespace object and setting all its attributes
+    opt = argparse.Namespace()
+    arg_names = inspect.getfullargspec(test_script_importable).args # Get the names of the function arguments
+    _locals = locals()
+    for arg in arg_names:
+        setattr(opt, arg, _locals[arg]) # Populate the Namespace object using the function arguments
+
+    # At this point, the opt variable should be in the EXACT state as if it were loaded from the argparse method
+    opt.data = check_file(opt.data)  # check file
+    print(opt)
+    #check_requirements()
+
+    if opt.task in ('train', 'val', 'test'):  # run normally
+        test(opt.data,
+             opt.weights,
+             opt.batch_size,
+             opt.img_size,
+             opt.conf_thres,
+             opt.iou_thres,
+             opt.save_json,
+             opt.single_cls,
+             opt.augment,
+             opt.verbose,
+             save_txt=opt.save_txt | opt.save_hybrid,
+             save_hybrid=opt.save_hybrid,
+             save_conf=opt.save_conf,
+             trace=not opt.no_trace,
+             v5_metric=opt.v5_metric,
+             opt_through=opt    # added as a object existence/information flag to pass through the opt variable instead of assuming it is in the namespace already
+             )
+
+    elif opt.task == 'speed':  # speed benchmarks
+        for w in opt.weights:
+            test(opt.data, w, opt.batch_size, opt.img_size, 0.25, 0.45, save_json=False, plots=False, v5_metric=opt.v5_metric)
+
+    elif opt.task == 'study':  # run over a range of settings and save/plot
+        # python test.py --task study --data coco.yaml --iou 0.65 --weights yolov7.pt
+        x = list(range(256, 1536 + 128, 128))  # x axis (image sizes)
+        for w in opt.weights:
+            f = f'study_{Path(opt.data).stem}_{Path(w).stem}.txt'  # filename to save to
+            y = []  # y axis
+            for i in x:  # img-size
+                print(f'\nRunning {f} point {i}...')
+                r, _, t = test(opt.data, w, opt.batch_size, i, opt.conf_thres, opt.iou_thres, opt.save_json,
+                               plots=False, v5_metric=opt.v5_metric)
+                y.append(r + t)  # results and times
+            np.savetxt(f, y, fmt='%10.4g')  # save
+        os.system('zip -r study.zip study_*.txt')
+        plot_study_txt(x=x)  # plot
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(prog='test.py')

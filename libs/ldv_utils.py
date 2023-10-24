@@ -86,6 +86,33 @@ def copy_files_to_YOLO_dataset_folder(training_source_folder, YOLO_dataset_folde
         shutil.copy(img_file, os.path.join(YOLO_dataset_folder, 'images', target_folder))
         shutil.copy(xml_file, os.path.join(YOLO_dataset_folder, 'images', target_folder))
 
+def copy_files_to_YOLO_test_folder(test_set_folder, temp_folder):
+    """
+    Copies the image and XML files to the YOLO test set folder structure. 
+    Copies only those images that have corresponding XML files
+    """
+    # Get all image and XML file paths
+    img_extensions = IMG_FILE_EXTENSIONS_
+    img_files = [glob.glob(os.path.join(test_set_folder, f'*.{ext}')) for ext in img_extensions]
+    img_files = [item for sublist in img_files for item in sublist]  # Flatten the list
+    xml_files = glob.glob(os.path.join(test_set_folder, '*.xml'))
+
+    # Create a list of file basenames that have both image and XML files
+    img_basenames = set([os.path.basename(f).split('.')[0] for f in img_files])
+    xml_basenames = set([os.path.basename(f).split('.')[0] for f in xml_files])
+    common_basenames = list(img_basenames & xml_basenames)
+
+    # Copy image and XML files to temporary test set folder
+    for basename in common_basenames:
+        img_file = next(f for f in img_files if (os.path.splitext(os.path.basename(f))[0] == basename)) # grabs the first file with same basename
+        xml_file = os.path.join(test_set_folder, f"{basename}.xml")
+
+        target_folder = 'test'
+
+        shutil.copy(img_file, os.path.join(temp_folder, 'images', target_folder))
+        shutil.copy(xml_file, os.path.join(temp_folder, 'images', target_folder))
+
+
 def convert_voc_to_yolo(xml_path, class_mapping):
     """
     Converts the PASCAL VOC style bounding box annotations to to YOLO style bounding box annotations
@@ -124,8 +151,9 @@ def create_label_files(YOLO_dataset_folder, class_mapping):
     Creates and saves the YOLO-compatible label files in the proper folders
     """
 
-    for set_type in ['train', 'valid']:
-        xml_files = glob.glob(os.path.join(YOLO_dataset_folder, 'images', set_type, '*.xml'))
+    for set_type in ['train', 'valid', 'test']:
+        fldr_check = os.path.exists(os.path.join(YOLO_dataset_folder, 'images', set_type))  # can now use in both training set construction and test set construction
+        xml_files = glob.glob(os.path.join(YOLO_dataset_folder, 'images', set_type, '*.xml')) if fldr_check else []
         for xml_file_path in xml_files:
             yolo_annotations = convert_voc_to_yolo(xml_file_path, class_mapping)  # does the converting from PASCAL VOC to YOLO style
             yolo_txt_path = os.path.join(YOLO_dataset_folder, 'labels', set_type, os.path.basename(xml_file_path).replace('.xml', '.txt'))
@@ -133,7 +161,7 @@ def create_label_files(YOLO_dataset_folder, class_mapping):
             with open(yolo_txt_path, 'w') as f:
                 f.write(yolo_annotations)
 
-def create_data_yaml_file(YOLO_dataset_folder, class_mapping):
+def create_training_data_yaml_file(YOLO_dataset_folder, class_mapping):
     """
     Create a YAML file with given dataset paths and class mapping.
     
@@ -213,14 +241,10 @@ def train_model_file_helper(training_source_folder, temp_dataset_folder, model_c
     create_label_files(YOLO_dataset_folder=temp_dataset_folder, class_mapping=class_mapping)
 
     # create the YAML dataset file
-    yaml_data_file_path = create_data_yaml_file(YOLO_dataset_folder=temp_dataset_folder, class_mapping=class_mapping)
+    yaml_data_file_path = create_training_data_yaml_file(YOLO_dataset_folder=temp_dataset_folder, class_mapping=class_mapping)
 
     # update the model config YAML file (namely the number of classes value)
     update_nc_in_yaml(file_path=model_config_yaml_path, num_classes=len(class_mapping))
-
-    print("Finished with copying files from training source folder and creating the YOLO labels.")
-
-    #clear_YOLO_dataset_folders(YOLO_dataset_folder=temp_dataset_folder)
 
     return class_mapping, yaml_data_file_path
 
@@ -289,7 +313,6 @@ def move_verified_helper(last_open_dir, training_source_dir, optional_verified_d
         report_str += f" Additionally, {num_verified_files_moved} were copied to {optional_verified_dir}"
 
     return report_str
-
 
 def construct_voc_from_yolo_annotations(img_full_path, yolo_annotations, class_mapping, imgsize, difficult_thresh=0.5):
     """
@@ -419,3 +442,52 @@ def detect_raw_moving_helper(raw_captures_dir, detected_dir):
 
     return report_str
     
+def test_model_file_helper(test_set_folder, temp_test_folder, training_source_data_yaml_path):
+    """
+    The helper function to be importaed and used within the Test Model Action
+    Helps with creating the test set YAML file and the folder structure (similar to the YOLO training dataset folder structure needed)
+    Args:
+    - test_set_folder (str): The directory where testing images and XML files are jointly are stored
+    - temp_test_folder (str): The temp directory where the images/test and labels/test are created for YOLO compatibility
+    """
+    
+    # pre-emptive clear to reset test's temporary folder
+    # clears the folders, so that new freshly random training source examples can populate it
+    if os.path.exists(temp_test_folder):
+        #shutil.rmtree(temp_test_folder) # deletes entire directory tree and folder
+        pass
+
+    # create the YOLOv7 compatible test directory
+    images_test_fldr = os.path.join(temp_test_folder, 'images', 'test')
+    labels_test_fldr = os.path.join(temp_test_folder, 'labels', 'test')
+    os.makedirs(images_test_fldr, exist_ok=True) # makes the directory anew
+    os.makedirs(labels_test_fldr, exist_ok=True)
+
+    # create the test YAML file
+    yaml_save_path = os.path.join(temp_test_folder, 'test_set_info.yaml')
+    # Get class names and number of classes from the file at training_source_data_yaml_path
+    # Load existing YAML file
+    with open(training_source_data_yaml_path, 'r') as f:
+        training_source_data_yaml = yaml.safe_load(f)
+    number_classes = training_source_data_yaml.get('nc', None)
+    class_names = training_source_data_yaml.get('names', None)
+    assert number_classes and class_names, f"Error loading the 'nc' and 'names' keys from the {training_source_data_yaml_path} YAML file"
+    class_mapping = {name: idx for idx, name in enumerate(class_names)}
+    # Create the YAML data structure
+    yaml_data = {
+        "test": images_test_fldr,
+        "nc": number_classes,
+        "names": class_names
+    }
+    # Write YAML file
+    with open(yaml_save_path, 'w') as yaml_file:
+        yaml.dump(yaml_data, yaml_file, sort_keys=False)
+
+    # locates all XML+image pairs in test set folder then copies over to images/test
+    copy_files_to_YOLO_test_folder(test_set_folder=test_set_folder,
+                                   temp_folder=temp_test_folder)
+    
+    # create the YOLO style txt files and place in appropriate labels folders
+    create_label_files(YOLO_dataset_folder=temp_test_folder, class_mapping=class_mapping)
+
+    return yaml_save_path
