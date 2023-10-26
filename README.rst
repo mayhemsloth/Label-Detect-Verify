@@ -8,10 +8,12 @@ LDV may be useful for you if you have the following object detection design requ
 - To not need to know that much Python or machine learning to utilize the recent incredible advances in computer vision
 
 Notable Out of Scope Features (what LDV is not):
+
 - LDV is NOT a scalable solution for generic object detection. It is specifically for fine-tuning on a small dataset. It needs to learn from a high-quality, well-labeled dataset to perform well.
 - LDV does NOT support cloud-based computation for training or inference, and is not designed with "Dockerization" in mind.
 
 TO DO Features:
+
 - Complete a robust README, with clear Installation, Initial Setup, and Normal Usage guides. 
 - Fundamentally change the dataloader code to eliminate the temporary copying of dataset. The YOLOv7 dataloader code requires a very folder-specific structure for loading in the data. This structure is not human-friendly for LDV purposes, as I made the decision to have a single training source folder, and a test set folder, and the validation set is randomly chosen each training run with a 70:30 split across the training source folder. For these reasons, my hacky solution was to simply copy the files into a temporary folder structure, and then delete the copies after they are needed. This feels bad and should be changed.
 - Ensure single channel images are supported by LDV (that is, histogram-like imaging works well with LabelImg GUI and YOLOv7 automatically handles the casting/copying into 3 channel dimensions)
@@ -20,7 +22,7 @@ The steps for installing Label-Detect-Verify are the following, tested only on W
 
 
 Installation of Label-Detect-Verify
-------------------
+-----------------------------------
 
 
 Windows
@@ -38,9 +40,6 @@ Open command prompt and navigate to the Label-Detect-Verify directory. Then do t
 
     pyrcc4 -o libs/resources.py resources.qrc
     For pyqt5, pyrcc5 -o libs/resources.py resources.qrc
-
-    python LDV_main.py
-    python labelImg.py [IMAGE_PATH] [PRE-DEFINED CLASS FILE]
 
 To run the program, use the command prompt to navigate to the Label-Detect-Verify directory, activate your virtual environment, and run
 
