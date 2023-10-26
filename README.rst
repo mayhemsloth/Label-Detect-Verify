@@ -1,6 +1,7 @@
 Label-Detect-Verify (LDV) is an open source project by Thomas Hymel to combine the functionalities of LabelImg (simple PyQt-based GUI for labeling objects in images and saving bounding box labels) and YOLOv7 (object detection model) into one simple-to-use GUI for creating labels, training a model locally on those labels, detecting new images, and verifying the new detections for an all-in-one, human-in-the-loop, object detection solution for extracting domain-specific information from RGB images. Below is the original README (with some small picture-focused edits) of the forked LabelImg repo. This repo was forked from LabelImg, and then the YOLOv7 code was copied into the yolov7 folder inside this repo.
 
 LDV may be useful for you if you have the following object detection design requests:
+
 - To automate most of a knowledge extraction task from a consistent source of domain-specific RGB imagery (may support single channel images? but not tested)
 - To have human verification be the final judgment for the predicted labels
 - To utilize the structured bounding box data in some further processing pipeline (by transferring verified images and XML files to an optional extra folder)
@@ -23,7 +24,6 @@ The steps for installing Label-Detect-Verify are the following, tested only on W
 
 Installation of Label-Detect-Verify
 -----------------------------------
-
 
 Windows
 ^^^^^^^
