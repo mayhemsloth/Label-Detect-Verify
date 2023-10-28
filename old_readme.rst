@@ -15,7 +15,8 @@ Notable Out of Scope Features (what LDV is not):
 
 TO DO Features:
 
-- Complete a robust README, with clear Installation, Initial Setup, and Normal Usage guides. 
+- Complete a robust README, with clear Installation, Initial Setup, and Normal Usage guides, including potentially redoing all of it in Markdown (via ChatGPT?)
+- Make the output of Test Model more user friendly.
 - Fundamentally change the dataloader code to eliminate the temporary copying of dataset. The YOLOv7 dataloader code requires a very folder-specific structure for loading in the data. This structure is not human-friendly for LDV purposes, as I made the decision to have a single training source folder, and a test set folder, and the validation set is randomly chosen each training run with a 70:30 split across the training source folder. For these reasons, my hacky solution was to simply copy the files into a temporary folder structure, and then delete the copies after they are needed. This feels bad and should be changed.
 - Ensure single channel images are supported by LDV (that is, histogram-like imaging works well with LabelImg GUI and YOLOv7 automatically handles the casting/copying into 3 channel dimensions)
 
