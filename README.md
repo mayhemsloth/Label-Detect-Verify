@@ -28,21 +28,81 @@ Notable Out of Scope Features (what LDV is not):
 
 ### Windows (only OS verified)
 
-1. Install [Python](https://www.python.org/downloads/windows/), [PyQt5](https://www.riverbankcomputing.com/software/pyqt/download5), and [install lxml](http://lxml.de/installation.html).
-2. Clone the Label-Detect-Verify repository to your desired location on your machine. Note that this location does not need to be anywhere close to your data or anything relevant. You will have the chance in the program to choose where your images are stored, and where your project folder will be. The location will be relevant only for initial setup and launching the program. 
-3. Set up a virtual environment for LDV. Python virtual environments are useful for isolating and managing the packages needed for any specific project, so that projects don't have conflicting requirements.
-4. Open command prompt and navigate to the Label-Detect-Verify directory (using `cd` to change directories). Then do the following command. This command compiles the resources needed to run LDV properly and will only ever needed to be run once.
+# Installation Instructions
 
-    ```shell
-    pyrcc5 -o libs/resources.py resources.qrc
-    ```
+1. **Install Dependencies**
 
-5. From the YOLOv7 repo, download the pre-trained weights (`.pt` files) for YOLOv7x, and optionally YOLOv7, YOLOv7-tiny, and YOLOv7-E6E. There are all slightly different model architectures. **These weight files must be placed inside the `yolov7` folder in the repository location.** These are the weights that will be the starting point for every model training run. 
-6. To run the program, use the command prompt to navigate to the Label-Detect-Verify directory, activate your virtual environment, and run:
+   - [**Python**](https://www.python.org/downloads/windows/)  
+      - Make sure you choose the correct installer for your operating system (Windows, Mac, or Linux).  
+      - During the installation on Windows, you may want to check the option to “Add Python to PATH” to simplify running Python from the command prompt.
 
-    ```shell
-    python LDV.py
-    ```
+2. **Clone the Label-Detect-Verify repository**  
+   - Use a version control tool like [Git](https://git-scm.com/downloads) to clone the repository:
+     ```shell
+     git clone https://github.com/YourUsername/Label-Detect-Verify.git
+     ```
+   - You can clone it to any folder you like. The actual location doesn’t have to be near your data or project folders. You will specify other paths later when running the program.
+   - If you’re not comfortable with Git, you can also download the repository as a ZIP file from GitHub and extract it anywhere you want.
+
+3. **Set up a Python virtual environment**  
+   - Virtual environments help isolate project-specific dependencies and avoid potential conflicts with other Python projects on your machine.  
+   - You can set up a virtual environment using [venv](https://docs.python.org/3/library/venv.html) or [conda](https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html).  
+   - Example using **venv** in your project folder:
+     ```shell
+     python -m venv venv
+     ```
+     Then activate it:  
+     - **Windows**:
+       ```shell
+       venv\Scripts\activate
+       ```
+     - **Mac/Linux**:
+       ```shell
+       source venv/bin/activate
+       ```
+
+4. **Install Required Python Packages**
+    1. After ensuring that your virtual environment is activated, open your command prompt or terminal and navigate (using `cd`) to the folder where you cloned **Label-Detect-Verify**. 
+    2. Run the following command to install the required packages in this environment.
+        ```shell
+        pip install -r requirements.txt
+        ```
+
+
+5. **Compile LDV resources**  
+   1. Open your command prompt or terminal and navigate (using `cd`) to the folder where you cloned **Label-Detect-Verify**.  
+   2. Run the following command to compile the necessary resource files:
+      ```shell
+      pyrcc5 -o libs/resources.py resources.qrc
+      ```
+   - This is a one-time compilation step to convert `.qrc` files (Qt resource files) into a Python file so PyQt can use them properly.
+
+6. **Download YOLOv7 pre-trained weights**  
+   - Go to the [YOLOv7 repository](https://github.com/WongKinYiu/yolov7) or its releases page where pre-trained `.pt` files are provided. Common files are:
+     - `yolov7x.pt`
+     - `yolov7.pt`
+     - `yolov7-tiny.pt`
+     - `yolov7-e6e.pt`
+   - These files are slightly different model architectures with varying accuracy and performance.  
+   - **Important:** Place these `.pt` files inside the `yolov7` folder in your cloned **Label-Detect-Verify** repository. This location is where the program will look for them.
+   - These weights are the things that will ultimately be changed during your training runs, but these will always be kept constant as a fantastic starting point to make it very easy to get to the custom class output.
+
+7. **Using Label-Detect-Verify**  
+   1. Activate your virtual environment (if not already activated).  
+   2. Navigate to the Label-Detect-Verify directory (where `LDV.py` is located).  
+   3. Run:
+      ```shell
+      python LDV.py
+      ```
+   - This should launch the LDV application. You can now configure where to store images, set up new project folders, and start using the tool.
+
+---
+
+### Troubleshooting Tips
+
+- If you run into permission issues while installing Python packages, try adding `--user` to the pip install command (e.g., `pip install --user lxml`), or make sure you’re in an activated virtual environment.  
+- If you have issues installing lxml on Windows, consider installing [Microsoft Visual C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) or using [conda](https://docs.conda.io/en/latest/).  
+- Ensure the YOLOv7 `.pt` files are placed in the correct folder; otherwise, the program will not find them.
 
 --- 
 #### Below this point is the original LabelImg README file convert to Markdown, kept for historical purposes.
