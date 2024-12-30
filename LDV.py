@@ -845,7 +845,7 @@ class MainWindow(QMainWindow, WindowMixin):
             # Nothing needs to be changed or set, early exit
             return self.selected_model_dir
         
-        # in the case where we need to automatically chose and set self.selected_model_dir
+        # in the case where we need to automatically choose and set self.selected_model_dir
         # sanity check for no saved trained models. early exit if no valid trained model folders
         model_folders = [item for item in os.listdir(self.trained_models_dir) if os.path.isdir(os.path.join(self.trained_models_dir, item))]         # List all files and subdirectories in the given directory
         # grab the valid 'result.txt' files and associated model name in dict, only if results file and 'weights/best.pt' exists

@@ -1,8 +1,9 @@
 # Label-Detect-Verify (LDV)
 
-Label-Detect-Verify (LDV) is an open source project by Thomas Hymel to combine the functionalities of LabelImg (simple PyQt-based GUI for labeling objects in images and saving bounding box labels) and YOLOv7 (object detection model) into one simple-to-use GUI for creating labels, training a model locally on those labels, detecting new images, and verifying the new detections for an all-in-one, human-in-the-loop, object detection solution for extracting domain-specific information from RGB images. Below is the original README (with some small picture-focused edits) of the forked LabelImg repo. This repo was forked from LabelImg, and then the YOLOv7 code was copied into the yolov7 folder inside this repo.
+Label-Detect-Verify (LDV) is an open source project by Thomas Hymel to combine the functionalities of two other open source project: [LabelImg](https://github.com/HumanSignal/labelImg) (simple PyQt-based GUI for labeling objects in images and saving bounding box labels) and [YOLOv7](https://github.com/WongKinYiu/yolov7) (training code and pre-trained weights for object detection model) into one simple-to-use GUI for creating labels, training a model locally on those labels, detecting new images, and verifying the new detections for an all-in-one, human-in-the-loop, object detection solution for extracting domain-specific information from RGB images. Far below is the original README (with some small picture-focused edits and changed to Markdown) of the forked LabelImg repo. This repo was forked from LabelImg, and then the YOLOv7 code was copied into the `yolov7` folder inside the LDV repo.
 
-## LDV may be useful for you if you have the following object detection design requests:
+## Use Cases
+LDV may be useful for you if you have the following object detection design requests:
 
 - To automate most of a knowledge extraction task from a consistent source of domain-specific RGB imagery (may support single channel images? but not tested)
 - To have human verification be the final judgment for the predicted labels
@@ -10,37 +11,42 @@ Label-Detect-Verify (LDV) is an open source project by Thomas Hymel to combine t
 - To use local computation and storage to complete the model training and detection for ensuring privacy/proprietary data purposes
 - To not need to know that much Python or machine learning to utilize the recent incredible advances in computer vision
 
-## Notable Out of Scope Features (what LDV is not):
+## Limitations
+Notable Out of Scope Features (what LDV is not):
 
 - LDV is NOT a scalable solution for generic object detection. It is specifically for fine-tuning on a small dataset. It needs to learn from a high-quality, well-labeled dataset to perform well.
 - LDV does NOT support cloud-based computation for training or inference, and is not designed with "Dockerization" in mind.
 
-## TO DO Features:
+## To-Do List:
 
-- Complete a robust README, with clear Installation, Initial Setup, and Normal Usage guides, including potentially redoing all of it in Markdown (via ChatGPT?)
-- Make the output of Test Model more user friendly.
-- Fundamentally change the dataloader code to eliminate the temporary copying of dataset. The YOLOv7 dataloader code requires a very folder-specific structure for loading in the data. This structure is not human-friendly for LDV purposes, as I made the decision to have a single training source folder, and a test set folder, and the validation set is randomly chosen each training run with a 70:30 split across the training source folder. For these reasons, my hacky solution was to simply copy the files into a temporary folder structure, and then delete the copies after they are needed. This feels bad and should be changed.
-- Ensure single channel images are supported by LDV (that is, histogram-like imaging works well with LabelImg GUI and YOLOv7 automatically handles the casting/copying into 3 channel dimensions)
+- **Complete a robust README, with clear Installation, Initial Setup, and Normal Usage guides.**
+- **Make the output of Test Model Action more user friendly.** Right now the Test Model is basically the same as the original `test.py` script from YOLOv7, which isn't the most user-friendly output. The Test Model action is focused on testing a model on your test set, so I want an quick, at-a-glance summary with real examples comparing the predicted bounding boxes overlaid on the images alongside an image with the the actual ground truth bounding boxes overlaid on the images. 
+- **Fundamentally change the dataloader code to eliminate the temporary copying of dataset.** The YOLOv7 dataloader code requires a very folder-specific structure for loading in the data. This structure is not human-friendly for LDV purposes, as I made the decision to have a single training source folder, and a test set folder, and the validation set is randomly chosen each training run with a 70:30 split across the training source folder. For these reasons, my hacky solution was to simply copy the files into a temporary folder structure, and then delete the copies after they are needed. This feels bad and should be changed.
+- **Ensure single channel images are supported by LDV** (that is, histogram-like imaging works well with LabelImg GUI and YOLOv7 automatically handles the casting/copying into 3 channel dimensions)
 
 ## Installation of Label-Detect-Verify
 
-### Windows
+### Windows (only OS verified)
 
 1. Install [Python](https://www.python.org/downloads/windows/), [PyQt5](https://www.riverbankcomputing.com/software/pyqt/download5), and [install lxml](http://lxml.de/installation.html).
-2. Clone the Label-Detect-Verify repository to your desired location on your machine.
-3. Open command prompt and navigate to the Label-Detect-Verify directory. Then do the following commands:
+2. Clone the Label-Detect-Verify repository to your desired location on your machine. Note that this location does not need to be anywhere close to your data or anything relevant. You will have the chance in the program to choose where your images are stored, and where your project folder will be. The location will be relevant only for initial setup and launching the program. 
+3. Set up a virtual environment for LDV. Python virtual environments are useful for isolating and managing the packages needed for any specific project, so that projects don't have conflicting requirements.
+4. Open command prompt and navigate to the Label-Detect-Verify directory (using `cd` to change directories). Then do the following command. This command compiles the resources needed to run LDV properly and will only ever needed to be run once.
 
     ```shell
-    pyrcc4 -o libs/resources.py resources.qrc
-    # For pyqt5
     pyrcc5 -o libs/resources.py resources.qrc
     ```
 
-4. To run the program, use the command prompt to navigate to the Label-Detect-Verify directory, activate your virtual environment, and run:
+5. From the YOLOv7 repo, download the pre-trained weights (`.pt` files) for YOLOv7x, and optionally YOLOv7, YOLOv7-tiny, and YOLOv7-E6E. There are all slightly different model architectures. **These weight files must be placed inside the `yolov7` folder in the repository location.** These are the weights that will be the starting point for every model training run. 
+6. To run the program, use the command prompt to navigate to the Label-Detect-Verify directory, activate your virtual environment, and run:
 
     ```shell
     python LDV.py
     ```
+
+--- 
+#### Below this point is the original LabelImg README file convert to Markdown, kept for historical purposes.
+---
 
 # About LabelImg
 
