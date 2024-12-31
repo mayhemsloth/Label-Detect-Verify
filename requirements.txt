@@ -1,11 +1,11 @@
 # From LabelImg requirements
-pyqt5
-lxml
+pyqt5==5.14.1
+lxml==4.9.1
 
 # From YOLOv7 requirements
 # Base ----------------------------------------
 matplotlib>=3.2.2
-numpy>=1.18.5
+numpy>=1.18.5,<2
 opencv-python>=4.1.1
 Pillow>=7.1.2
 PyYAML>=5.3.1
