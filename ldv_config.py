@@ -27,8 +27,8 @@ class Training:
 
     def __post_init__(self):
         self.img_input_size = [1280, 1280] # during training, images will be automatically resized to the square (X,X) with padding
-                                           # for training and validation dataset purposes [X, Y] => ((X,X)_training, (Y,Y)_validation)
-                                           # Note: must be an integer multiple of 32. (640, 960, 1280, 1600, 1920 are all good candidates)
+                                           # for training and validation dataset purposes [First, Second] => ((First, First)_training, (Second, Second)_validation)
+                                           # Note: each value must be an integer multiple of 32. (640, 960, 1280, 1600, 1920 are all good candidates)
     def to_dict(self):
         return asdict(self)
 

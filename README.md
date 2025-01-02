@@ -24,11 +24,8 @@ Notable Out of Scope Features (what LDV is not):
 - **Fundamentally change the dataloader code to eliminate the temporary copying of dataset.** The YOLOv7 dataloader code requires a very folder-specific structure for loading in the data. This structure is not human-friendly for LDV purposes, as I made the decision to have a single training source folder, and a test set folder, and the validation set is randomly chosen each training run with a 70:30 split across the training source folder. For these reasons, my hacky solution was to simply copy the files into a temporary folder structure, and then delete the copies after they are needed. This feels bad and should be changed.
 - **Ensure single channel images are supported by LDV** (that is, histogram-like imaging works well with LabelImg GUI and YOLOv7 automatically handles the casting/copying into 3 channel dimensions)
 
-## Installation of Label-Detect-Verify
 
-### Windows (only OS verified)
-
-# Installation Instructions
+# Label-Detect-Verify Installation Instructions
 
 1. **Install Dependencies**
 
@@ -94,18 +91,55 @@ Notable Out of Scope Features (what LDV is not):
       ```shell
       python LDV.py
       ```
-   - This should launch the LDV application. You can now configure where to store images, set up new project folders, and start using the tool.
+   - This should launch the LDV application in a new, stand alone window. You can now configure where to store images, set up new project folders, and start using the tool. Note that the terminal from which you launched LDV will print out useful information during some actions and needs to be kept open for LDV window to persist.
 
----
 
-### Troubleshooting Tips
+### Installation Troubleshooting Tips
 
 - If you run into permission issues while installing Python packages, try adding `--user` to the pip install command (e.g., `pip install --user lxml`), or make sure you’re in an activated virtual environment.  
 - If you have issues installing lxml on Windows, consider installing [Microsoft Visual C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) or using [conda](https://docs.conda.io/en/latest/).  
 - Ensure the YOLOv7 `.pt` files are placed in the correct folder; otherwise, the program will not find them.
 
+---
+
+# Usage Guide
+
+The overview usage flow of Label-Detect-Verify is the following:
+
+1. Install properly following the instructions above (done only once).
+2. First Time Setup following the instructions below (done only once per project).
+3. Manually label your training dataset (this is the LabelImg functionality)
+4. Train a model (this is the YOLOv7 functionality)
+5. Populate the Raw Captures folder with new images that need to be predicted with object detections from a distribution similar to the images that you have labeled
+6. Detect the Raw Captures folder using a trained model
+7. Verify the detections as already correct, or correct them and then verify them
+8. Repeat steps 4 through 7 as needed to get a better and better model, or add more classes to detect.
+
+The additional Label-Detect-Verify components built into the LabelImg framework consists of 4 primary actions, seen in the `LDV Actions` drop down menu of the toolbar. Because these are meaningfully important, non-destructive but also generally non-undoable actions, there is a Confirm Action Pop-up message to confirm any of these actions. That pop-up message itself is toggleable on and off.
+
+1. **Detect Raw Captures** - This action first checks if there are any valid images present in the set Raw Captures folder. If there are, then it automatically looks for and selects a trained model directory to use for detection purposes. The model is selected based on the best results of the validation set metrics *during its own training run*. Optionally, you may select which model to use with the Optional Settings under the `LDV Settings` drop down menu of the toolbar. After detection, the images in the Raw Captures folder are automatically moved into the `detected_captures` project subfolder (which should be the primary, usual working directory opened in LabelImg) to faciliate validation!
+
+2. **Move Verified Captures** - This action moves all *verified* images (images with the yellow/green background: verified status is toggled with the `spacebar` hotkey) and associated label files from the currently opened directory to the `training_source` project subfolder. Optionally, if the Verified Output folder is set than ALSO move a copy of all verified images to that location as well. This optional Verified Output folder is provided if you care to process the data further externally, for example, to run some other script that automatically integrates the newly verified outputs into a database which can then apply further logic to make decisions.
+3. **Train Model** - This action, after ensuring the `training_source` subfolder is not empty, trains a new model on the entirety of images in the `training_source` subfolder. The training configuration is set by the `ldv_config.py` file (more on that below). All the necessary model information, including the weights, are stored in the `trained_models` project subfolder. The terminal will update with some information about the the training of the model.
+4. **Test Model** - This action, after ensuring the `test_set` subfolder is not empty, tests the selected model on the test set of images. These images should not ever be a part of the `training_source`, and should be manually labeled and kept entirely separate in the `test_set` folder. This set of images could function as some of the "hardest" images in your distribution to detect properly, or it could simply function as a solid representation to test the models against.
+
+
+---
+
+## First Time Setup Explanation and Instructions
+
+After installation and first start up, there are a few things to do. 
+
+- Set the Project Folder
+- Move your starting training image set into the `training_source` subfolder of your project.
+- Open up, look at, and configure the file `ldv_config.py`.
+- Set the Raw Captures Folder
+
+
 --- 
+
 #### Below this point is the original LabelImg README file convert to Markdown, kept for historical purposes.
+
 ---
 
 # About LabelImg

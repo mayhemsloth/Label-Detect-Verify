@@ -220,7 +220,7 @@ class MainWindow(QMainWindow, WindowMixin):
         self.file_dock.setFeatures(QDockWidget.DockWidgetFloatable)
 
         self.dock_features = QDockWidget.DockWidgetClosable | QDockWidget.DockWidgetFloatable
-        self.dock.setFeatures(self.dock.features() ^ self.dock_features)
+        self.dock.setFeatures(self.dock.features() ^ int(self.dock_features))
 
         # Actions
         action = partial(new_action, self)
@@ -906,7 +906,7 @@ class MainWindow(QMainWindow, WindowMixin):
 
         # check the selected_model_dir and choose if not
         _auto_choice = self._auto_choose_selected_model_dir()
-        if _auto_choice is None: # there are no valid models to automatically choose from, pop-up has already been shown
+        if _auto_choice is None: # there are no valid models to automatically choose from, pop-up has already been shown in the function
             return None
 
         # runs YOLOv7 detect.py, but the importable function version. 
@@ -1050,7 +1050,7 @@ class MainWindow(QMainWindow, WindowMixin):
         Slottable function responsible for Test Model action
         """
         # sanity check that test_set_dir is not empty
-        files = [item for item in os.listdir(self.test_set_dir) if os.path.isfile(os.path.join(self.test_set_dir, item))]         # List all files and subdirectories in the given directory
+        files = [item for item in os.listdir(self.test_set_dir) if os.path.isfile(os.path.join(self.test_set_dir, item))]  # List all files and subdirectories in the given directory
         if len(files) == 0:
             msg = QMessageBox()
             msg.setIcon(QMessageBox.Warning)
@@ -1064,7 +1064,7 @@ class MainWindow(QMainWindow, WindowMixin):
         if not os.path.exists(training_source_data_yaml_path):
             msg = QMessageBox()
             msg.setIcon(QMessageBox.Warning)
-            msg.setText(f"No dataset_info.yaml file found in 'temp' folder of training source directory ({self.training_source_dir}). Pleas ensure a proper training run has been done before testing models.")
+            msg.setText(f"No dataset_info.yaml file found in 'temp' folder of training source directory ({self.training_source_dir}). Please ensure a proper training run has been done before testing models.")
             msg.setWindowTitle("No DataSet Info Found")
             msg.exec_()
             return None
